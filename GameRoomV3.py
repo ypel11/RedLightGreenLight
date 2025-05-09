@@ -1,7 +1,7 @@
 import socket, threading, struct, time, pickle, cv2, numpy as np
 from GameLogic import Game
 import Utils
-HOST = '10.100.102.84'
+HOST = '10.100.102.32'
 PORT = 5000
 MAX_PLAYERS = 2
 TICK = 0.01
@@ -66,10 +66,13 @@ class GameRoom:
                         alive_frames.append(frame)
 
                 # 2) Check for winner (first win_flag or last alive)
-                if self.winner is None:
+                if self.winner is not None:
+                    break
+                else:
                     alive_ids = [game_id for game_id, info in self.games.items() if info['game'].active]
-                    if len(alive_ids) == 0:
-                        break
+                    if not alive_ids:
+                        break  # everyone lost
+
 
                 # 3) Build grid and send to all sockets
                 #if alive_frames:
