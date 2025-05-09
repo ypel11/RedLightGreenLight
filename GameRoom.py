@@ -1,9 +1,7 @@
 import socket, threading, struct, time, pickle, cv2, numpy as np
-
-import Utils
 from GameLogic import Game
-
-HOST = '0.0.0.0'
+import Utils
+HOST = '10.100.102.84'
 PORT = 5000
 MAX_PLAYERS = 2
 TICK = 0.01
@@ -30,11 +28,11 @@ class GameRoom:
         game = self.games[game_id]['game']
         sock = self.games[game_id]['sock']
         while game.active and self.winner is None:
-            data = sock.recv(8)
-            win_flag, size = struct.unpack("? I", data)
-            data = Utils.recv_all(sock, size)
-            jpg_frame = pickle.loads(data)
-            frame = cv2.imdecode(jpg_frame, cv2.IMREAD_COLOR)
+            header = Utils.recv_all(sock, 5)  # 1 byte flag + 4 byte size
+            win_flag, size = struct.unpack(">?I", header)
+            payload = Utils.recv_all(sock, size)  # raw JPEG bytes
+            arr = np.frombuffer(payload, np.uint8)  # build numpy array from bytes
+            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)  # decode JPEG
             with self.lock:
                 self.games[game_id]['frame'] = (frame, win_flag)
 
@@ -60,22 +58,18 @@ class GameRoom:
                     frame = game.update_values(frame, win_flag)
                     alive = game.active
                     winner = game.winner
-                    Utils.send_frame(sock, frame, alive)
                     if winner is not None:
                         self.winner = (game_id, winner)
                         break
+                    Utils.send_frame(sock, frame, alive)
                     if alive:
                         alive_frames.append(frame)
 
                 # 2) Check for winner (first win_flag or last alive)
                 if self.winner is None:
                     alive_ids = [game_id for game_id, info in self.games.items() if info['game'].active]
-                    if len(alive_ids) == 1:
-                        self.winner = alive_ids[0]
-                    elif not alive_ids:
-                        self.winner = None  # everyone lost
-                if self.winner is not None:
-                    break
+                    if len(alive_ids) == 0:
+                        break
 
                 # 3) Build grid and send to all sockets
                 #if alive_frames:
@@ -86,9 +80,9 @@ class GameRoom:
                 # game ended, send final result frames once more
         for info in self.games.values():
             # overlay result on the last out frame
-            frame = info['frame'][0] if info['frame'] else np.zeros((480, 640, 3), np.uint8)
-            text = ("Winner: " + str(self.winner)) if self.winner else "Everyone Lost"
-            cv2.putText(frame, text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 3)
+            frame = 255 * np.ones((200, 640, 3), np.uint8)
+            text = ("Winner: player " + str(self.winner[1] + " from game " + str(self.winner[0]))) if self.winner else "Everyone Lost"
+            cv2.putText(frame, text, (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 3)
             Utils.send_frame(info['sock'], frame, False)
             info['sock'].close()
 
@@ -119,5 +113,5 @@ def main():
     srv.close()
     print("Game over, server shutting down.")
 
-if __name__=="__main__":
+if __name__ =="__main__":
     main()

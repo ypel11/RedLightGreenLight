@@ -4,11 +4,14 @@ import cv2
 import pickle
 
 
-def send_frame(sock, frame, game_active):
-    """Send one JPEG frame with 4-byte length prefix."""
-    _, jpg = cv2.imencode('.jpg', frame)
-    buffer = pickle.dumps(jpg)
-    sock.send(struct.pack("?I", game_active, len(buffer)))
+def send_frame(sock, frame, alive_flag):
+    # overlay alive_flag or whatever on frame first…
+    success, jpg = cv2.imencode('.jpg', frame)
+    if not success:
+        return
+    buffer = jpg.tobytes()
+    # send 1 byte alive_flag + 4 bytes length + raw JPEG
+    sock.send(struct.pack(">?I", alive_flag, len(buffer)))
     sock.send(buffer)
 def recv_all(sock, n):
     data = b""
@@ -18,6 +21,7 @@ def recv_all(sock, n):
             raise ConnectionError("Socket closed")
         data += packet
     return data
+
 
 def stack_frames(frames, grid_size=(2,3)):
     h, w = frames[0].shape[:2]
