@@ -1,10 +1,11 @@
+
 import socket
 import struct
 import cv2
 import numpy as np
 import pickle
 
-IP = '10.100.102.84'
+IP = 'HOST PORT'
 PORT = 5000
 
 def recv_all(sock, length):
@@ -29,7 +30,6 @@ def main():
         ret, frame = cap.read()
         success, jpg = cv2.imencode('.jpg', frame)
         buffer = jpg.tobytes()
-        print(len(buffer))
         sock.send(struct.pack(">?I", is_win, len(buffer)))
         sock.send(buffer)
         header = recv_all(sock, 5)
@@ -40,6 +40,7 @@ def main():
         end = frame
         cv2.imshow("Game", frame)
     cap.release()
+
     while True:
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
