@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import pickle
 
-IP = '10.100.102.32'
+IP = 'SERVER IP'
 PORT = 5000
 
 def send_frame(sock, frame, alive_flag):
