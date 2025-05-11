@@ -1,7 +1,7 @@
 import socket, threading, struct, time, pickle, cv2, numpy as np
 from GameLogic import Game
 import Utils
-HOST = '10.100.102.32'
+HOST = 'SEVER IP'
 PORT = 5000
 MAX_PLAYERS = 1
 TICK = 0.05
