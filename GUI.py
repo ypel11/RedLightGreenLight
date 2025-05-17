@@ -79,7 +79,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Red Light, Green Light Game')
-        self.ip = '10.100.102.32'
+        self.ip = 'server ip'
         self.port = 5000
 
         # UI Elements
