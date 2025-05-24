@@ -37,6 +37,7 @@ class NetworkThread(QtCore.QThread):
                 if frame is not None:
                     self.frame_received.emit(frame)
                 if not game_active:
+                    self.msleep(20000)
                     break
                 self.msleep(33)
         except Exception as e:
@@ -52,7 +53,7 @@ class NetworkThread(QtCore.QThread):
 # ─── Player Capture Thread ─────────────────────────────────────────────────────
 
 class CaptureThread(QtCore.QThread):
-    send_frame = QtCore.pyqtSignal(bytes, bool)
+    send_frame = QtCore.pyqtSignal(bytes)
 
     def __init__(self):
         super().__init__()
@@ -65,11 +66,10 @@ class CaptureThread(QtCore.QThread):
             if not ret:
                 break
             # check for win flag
-            win = bool(cv2.waitKey(1) & 0xFF == ord(' '))
             success, jpg = cv2.imencode('.jpg', frame)
             if success:
                 data = jpg.tobytes()
-                self.send_frame.emit(data, win)
+                self.send_frame.emit(data)
             self.msleep(33)  # ~30 FPS
 
     def stop(self):
@@ -96,8 +96,7 @@ class LoginDialog(QtWidgets.QDialog):
         layout.addRow("Role:", self.role_combo)
 
         btn = QtWidgets.QPushButton("Connect")
-        btn.clicked.connect(self.
-                            accept)
+        btn.clicked.connect(self.accept)
         layout.addWidget(btn)
 
     def get_credentials(self):
@@ -113,15 +112,18 @@ class LoginDialog(QtWidgets.QDialog):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, ip, port, role):
         super().__init__()
-        super().resize(1134, 898)
+        self.WIDTH = 1200
+        self.HEIGHT = 900
+        super().resize(self.WIDTH, self.HEIGHT)
         self.setWindowTitle(f"Red Light Green Light — {role.title()}")
         self.role = role
+        self.win_flag = False
 
         # Central widget: a QLabel to display video
         self.centralwidget = QtWidgets.QWidget(self)
         self.centralwidget.setObjectName("centralwidget")
         self.frame = QtWidgets.QFrame(self.centralwidget)
-        self.frame.setGeometry(QtCore.QRect(0, 90, 1141, 811))
+        self.frame.setGeometry(QtCore.QRect(0, 90, self.WIDTH, self.HEIGHT-90))
         palette = QtGui.QPalette()
         brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
         brush.setStyle(QtCore.Qt.SolidPattern)
@@ -148,7 +150,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.frame.setFrameShadow(QtWidgets.QFrame.Raised)
         self.frame.setObjectName("frame")
         self.video_label = QtWidgets.QLabel(self.frame)
-        self.video_label.setGeometry(QtCore.QRect(410, 240, 311, 211))
+        self.video_label.setGeometry(QtCore.QRect(0,90, self.frame.width(),self.frame.height()))
         self.video_label.setObjectName("video_label")
         self.logo = QtWidgets.QLabel(self.centralwidget)
         self.logo.setGeometry(QtCore.QRect(0, -10, 1131, 101))
@@ -193,21 +195,35 @@ class MainWindow(QtWidgets.QMainWindow):
         # Handshake: send role byte
         self.sock.send(b'P' if role == 'player' else b'S')
 
-        # Threads
-        self.net_thread = NetworkThread(self.sock, role)
-        self.net_thread.frame_received.connect(self.update_frame)
-        self.net_thread.finished.connect(self.on_finished)
-
         if role == 'player':
+            # 1) Create the Win button as a child of the same frame that holds your video
+            self.win_button = QtWidgets.QPushButton(self.frame)
+            # 2) Set its label
+            self.win_button.setText("Win!")
+            # 3) Position it somewhere—e.g. bottom‐left corner of the frame
+            #    Here x=50, y=frame.height()-50, width=100, height=30
+            button_width = 100
+            button_height = 40
+            self.win_button.setGeometry((self.frame.width()//2)-button_width//2,(self.frame.height()-100), button_width, button_height)
+            # 4) Wire it up
+            self.win_button.setText("Win!")
+            self.win_button.clicked.connect(self.button_pressed)
             self.cap_thread = CaptureThread()
             self.cap_thread.send_frame.connect(self.on_send_frame)
             self.cap_thread.start()
 
+        # Threads
+        self.net_thread = NetworkThread(self.sock, role)
+        self.net_thread.frame_received.connect(self.update_frame)
+        self.net_thread.finished.connect(self.on_finished)
         self.net_thread.start()
 
-    def on_send_frame(self, data, win_flag):
+
+    def button_pressed(self):
+        self.win_flag = True
+    def on_send_frame(self, data):
         # header: 1 byte win + 4 byte size
-        header = struct.pack(">?I", win_flag, len(data))
+        header = struct.pack(">?I",  self.win_flag, len(data))
         try:
             self.sock.sendall(header + data)
         except Exception as e:
@@ -224,7 +240,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.video_label.updateGeometry()
 
     def on_finished(self):
-        QtWidgets.QMessageBox.information(self, "Game Over", "The game has ended.")
+        self.msleep(20000)
+        #QtWidgets.QMessageBox.information(self, "Game Over", "The game has ended.")
         self.close()
 
     def closeEvent(self, e):
