@@ -7,7 +7,7 @@ from PyQt5 import QtCore, QtWidgets, QtGui
 # ─── Network Thread ────────────────────────────────────────────────────────────
 
 class NetworkThread(QtCore.QThread):
-    frame_received = QtCore.pyqtSignal(np.ndarray)
+    frame_received = QtCore.pyqtSignal(np.ndarray, bool)
     finished = QtCore.pyqtSignal()
 
     def __init__(self, sock, role):
@@ -29,13 +29,13 @@ class NetworkThread(QtCore.QThread):
         try:
             while self.running:
                 # Header: 1 byte game_active (ignored here) + 1 byte alive + 4 bytes size
-                header = self.recv_all(6)
-                game_active, alive, size = struct.unpack(">??I", header)
+                header = self.recv_all(7)
+                red_light, game_active, alive, size = struct.unpack(">???I", header)
                 payload = self.recv_all(size)
                 arr = np.frombuffer(payload, np.uint8)
                 frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                 if frame is not None:
-                    self.frame_received.emit(frame)
+                    self.frame_received.emit(frame, red_light)
                 if not game_active:
                     self.msleep(20000)
                     break
@@ -128,21 +128,12 @@ class MainWindow(QtWidgets.QMainWindow):
         brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
         brush.setStyle(QtCore.Qt.SolidPattern)
         palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Base, brush)
-        brush = QtGui.QBrush(QtGui.QColor(0, 85, 0))
+        brush = QtGui.QBrush(QtGui.QColor(0, 191, 99))
         brush.setStyle(QtCore.Qt.SolidPattern)
         palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Window, brush)
         brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
         brush.setStyle(QtCore.Qt.SolidPattern)
         palette.setBrush(QtGui.QPalette.Inactive, QtGui.QPalette.Base, brush)
-        brush = QtGui.QBrush(QtGui.QColor(0, 85, 0))
-        brush.setStyle(QtCore.Qt.SolidPattern)
-        palette.setBrush(QtGui.QPalette.Inactive, QtGui.QPalette.Window, brush)
-        brush = QtGui.QBrush(QtGui.QColor(0, 85, 0))
-        brush.setStyle(QtCore.Qt.SolidPattern)
-        palette.setBrush(QtGui.QPalette.Disabled, QtGui.QPalette.Base, brush)
-        brush = QtGui.QBrush(QtGui.QColor(0, 85, 0))
-        brush.setStyle(QtCore.Qt.SolidPattern)
-        palette.setBrush(QtGui.QPalette.Disabled, QtGui.QPalette.Window, brush)
         self.frame.setPalette(palette)
         self.frame.setMouseTracking(False)
         self.frame.setAutoFillBackground(True)
@@ -150,10 +141,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.frame.setFrameShadow(QtWidgets.QFrame.Raised)
         self.frame.setObjectName("frame")
         self.video_label = QtWidgets.QLabel(self.frame)
-        self.video_label.setGeometry(QtCore.QRect(0,90, self.frame.width(),self.frame.height()))
+        self.video_label.setGeometry(QtCore.QRect(self.frame.width()//8,self.frame.height()//8 + 90, (self.frame.width()//4)*3,(self.frame.height()//4)*3))
         self.video_label.setObjectName("video_label")
         self.logo = QtWidgets.QLabel(self.centralwidget)
-        self.logo.setGeometry(QtCore.QRect(0, -10, 1131, 101))
+        self.logo.setGeometry(QtCore.QRect(0, -10, self.WIDTH, 101))
         palette = QtGui.QPalette()
         brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
         brush.setStyle(QtCore.Qt.SolidPattern)
@@ -229,8 +220,20 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             print(e)
 
-    def update_frame(self, frame: np.ndarray):
+    def update_background(self, red_light : bool):
+        palette = QtGui.QPalette()
+        if red_light:
+            brush = QtGui.QBrush(QtGui.QColor(255, 49, 49))
+        else:
+            brush = QtGui.QBrush(QtGui.QColor(0, 191, 99))
+        brush.setStyle(QtCore.Qt.SolidPattern)
+        palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Window, brush)
+        self.frame.setPalette(palette)
+
+
+    def update_frame(self, frame: np.ndarray, red_light : bool):
         # convert BGR→RGB→QImage
+        self.update_background(red_light)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb.shape
         bytes_per_line = ch * w
