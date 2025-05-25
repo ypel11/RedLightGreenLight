@@ -1,9 +1,9 @@
 import socket, threading, struct, time, pickle, cv2, numpy as np
 from GameLogic import Game
 import Utils
-HOST = '10.100.102.32'
+HOST = '0.0.0.0'
 PORT = 5000
-MAX_PLAYERS = 2
+MAX_PLAYERS = 1
 TICK = 0.05
 class GameRoom:
 
@@ -13,6 +13,7 @@ class GameRoom:
         self.game_id = 1
         self.lock = threading.Lock()
         self.winner = None
+        self.red_light = False
         self.light_duration = light_duration
         self.start_time = None
 
@@ -75,7 +76,7 @@ class GameRoom:
                     if self.winner is not None:
                         self.winner = (game_id, self.winner)
                         break
-                    Utils.send_frame(sock, frame, True, alive)
+                    Utils.send_frame(sock, frame, True, alive, self.red_light)
                     # Check if player lost
                     if alive:
                         alive_frames.append(frame)
@@ -101,9 +102,9 @@ class GameRoom:
         text = f"Winner: player {self.winner[1]} from game {self.winner[0]}" if self.winner else "Everyone Lost"
         cv2.putText(frame, text, (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 3)
         for info in self.games.values():
-            Utils.send_frame(info['sock'], frame, False, False)
+            Utils.send_frame(info['sock'], frame, False, False, self.red_light)
         for spec in self.spectators:
-            Utils.send_frame(spec, frame, False, False)
+            Utils.send_frame(spec, frame,False, False, self.red_light)
 
 
 
@@ -111,6 +112,7 @@ class GameRoom:
     def change_light(self):
         elapsed_time = time.time() - self.start_time
         if elapsed_time > self.light_duration:
+            self.red_light = not self.red_light
             for game_id, info in list(self.games.items()):
                 game = info['game']
                 game.change_light()  # Toggle game state
