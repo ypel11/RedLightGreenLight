@@ -4,14 +4,14 @@ import cv2
 import pickle
 
 
-def send_frame(sock, frame, recv_more, send_more):
+def send_frame(sock, frame, recv_more, send_more, red_light):
     # overlay alive_flag or whatever on frame first…
     success, jpg = cv2.imencode('.jpg', frame)
     if not success:
         return
     buffer = jpg.tobytes()
     # send 1 byte alive_flag + 4 bytes length + raw JPEG
-    sock.send(struct.pack(">??I",  recv_more, send_more, len(buffer)))
+    sock.send(struct.pack(">???I",  red_light, recv_more, send_more, len(buffer)))
     sock.send(buffer)
 def recv_all(sock, n):
     data = b""
