@@ -3,6 +3,7 @@
 import sys, socket, struct, threading
 import cv2, numpy as np
 from PyQt5 import QtCore, QtWidgets, QtGui
+from PyQt5.QtWidgets import QVBoxLayout, QSpacerItem, QSizePolicy
 
 # ─── Network Thread ────────────────────────────────────────────────────────────
 
@@ -121,28 +122,32 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Central widget: a QLabel to display video
         self.centralwidget = QtWidgets.QWidget(self)
-        self.centralwidget.setObjectName("centralwidget")
+        self.setCentralWidget(self.centralwidget)
+
         self.frame = QtWidgets.QFrame(self.centralwidget)
-        self.frame.setGeometry(QtCore.QRect(0, 90, self.WIDTH, self.HEIGHT-90))
-        palette = QtGui.QPalette()
-        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
-        brush.setStyle(QtCore.Qt.SolidPattern)
-        palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Base, brush)
-        brush = QtGui.QBrush(QtGui.QColor(0, 191, 99))
-        brush.setStyle(QtCore.Qt.SolidPattern)
-        palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Window, brush)
-        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
-        brush.setStyle(QtCore.Qt.SolidPattern)
-        palette.setBrush(QtGui.QPalette.Inactive, QtGui.QPalette.Base, brush)
-        self.frame.setPalette(palette)
+        self.frame.setGeometry(0, 90, self.WIDTH, self.HEIGHT - 90)
+        self.frame.setAutoFillBackground(True)
+        pal = self.frame.palette()
+        pal.setColor(self.frame.backgroundRole(), QtGui.QColor(0, 191, 99))
+        self.frame.setPalette(pal)
         self.frame.setMouseTracking(False)
         self.frame.setAutoFillBackground(True)
         self.frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
         self.frame.setFrameShadow(QtWidgets.QFrame.Raised)
         self.frame.setObjectName("frame")
         self.video_label = QtWidgets.QLabel(self.frame)
-        self.video_label.setGeometry(QtCore.QRect(self.frame.width()//8,self.frame.height()//8 + 90, (self.frame.width()//4)*3,(self.frame.height()//4)*3))
-        self.video_label.setObjectName("video_label")
+        self.video_label.setStyleSheet("background: black;")  # optional border
+        self.video_label.setAlignment(QtCore.Qt.AlignCenter)
+        layout = QVBoxLayout(self.frame)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addSpacerItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Expanding))
+        layout.addWidget(self.video_label, alignment=QtCore.Qt.AlignCenter)
+        layout.addSpacerItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Expanding))
+        fw = self.frame.width()
+        fh = self.frame.height()
+        videoW = int(fw * 0.75)
+        videoH = int(fh * 0.75)
+        self.video_label.setFixedSize(videoW, videoH)
         self.logo = QtWidgets.QLabel(self.centralwidget)
         self.logo.setGeometry(QtCore.QRect(0, -10, self.WIDTH, 101))
         palette = QtGui.QPalette()
