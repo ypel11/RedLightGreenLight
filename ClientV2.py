@@ -6,7 +6,7 @@ import numpy as np
 import pickle
 
 IP = '10.100.102.84'
-PORT = 5000
+PORT = 50002
 
 def recv_all(sock, length):
     data = b""
