@@ -148,6 +148,7 @@ class LoginDialog(QtWidgets.QDialog):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, sock, role):
         super().__init__()
+        self.sock = sock
         self.WIDTH = 1200
         self.HEIGHT = 900
         super().resize(self.WIDTH, self.HEIGHT)
@@ -312,7 +313,15 @@ def main():
     msg = json.dumps({"action": action, "user": user, "pass": pw}).encode()
     sock.send(len(msg).to_bytes(4, "big") + msg)
 
-    win = MainWindow(sock, role)
+    # Validate auth
+    raw = sock.recv(4)
+    length = int.from_bytes(raw, "big")
+    reply = json.loads(sock.recv(length).decode())
+    if not reply.get("ok"):
+        QtWidgets.QMessageBox.critical(None, "Auth Failed", reply.geot("error", ""))
+        sys.exit(1)
+
+    win = MainWindow(sock, "player")
     win.show()
     sys.exit(app.exec_())
 

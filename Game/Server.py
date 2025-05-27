@@ -6,21 +6,7 @@ PORT = 5000
 MAX_PLAYERS = 1
 TICK = 0.05
 
-class login:
 
-    DB = "users.db"
-
-    def __init__(self):
-        conn = sqlite3.connect(DB)
-        c = conn.cursor()
-        c.execute("""
-          CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            pw_hash BLOB
-          )
-        """)
-        conn.commit()
-        conn.close()
 
 class GameRoom:
 
@@ -135,7 +121,64 @@ class GameRoom:
                 game.change_light()  # Toggle game state
             self.start_time = time.time()
 
+
+DB = "Users.db"
+
+def init_db():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        pw_hash BLOB
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def handle_auth(sock):
+    """
+    Reads one JSON message: {"action":"login"/"signup", "user":.., "pass":..}
+    Replies with JSON {"ok":bool, "error":str?}.
+    Returns True if login/signup succeeded.
+    """
+    raw = sock.recv(4)
+    if not raw:
+        return False
+    length = int.from_bytes(raw, "big")
+    msg = json.loads(Utils.recv_all(sock, length).decode())
+    username = msg["user"]
+    password = msg["pass"].encode()
+
+    db = sqlite3.connect(DB)
+    cur = db.cursor()
+
+    if msg["action"] == "signup":
+        # check if exists
+        cur.execute("SELECT 1 FROM users WHERE username=?", (username,))
+        if cur.fetchone():
+            reply = {"ok":False, "error":"Username taken."}
+        else:
+            pw_hash = bcrypt.hashpw(password, bcrypt.gensalt())
+            cur.execute("INSERT INTO users VALUES (?, ?)", (username, pw_hash))
+            db.commit()
+            reply = {"ok":True}
+    else:  # login
+        cur.execute("SELECT pw_hash FROM users WHERE username=?", (username,))
+        row = cur.fetchone()
+        if row and bcrypt.checkpw(password, row[0]):
+            reply = {"ok":True}
+        else:
+            reply = {"ok":False, "error":"Invalid credentials."}
+
+    db.close()
+
+    out = json.dumps(reply).encode()
+    sock.send(len(out).to_bytes(4, "big") + out)
+    return reply["ok"]
+
 def main():
+    init_db()
     room = GameRoom(light_duration=5)
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.bind((HOST, PORT))
@@ -146,6 +189,10 @@ def main():
     # accept players
     while len(room.games) < MAX_PLAYERS or cv2.waitKey(1) & 0xFF == ord('s'):
         sock, addr = srv.accept()
+        ok = handle_auth(sock)
+        if not ok:
+            sock.close()
+            continue
         role = sock.recv(1)
         if role == b'P':
             game_id, thread = room.add_player(sock)
