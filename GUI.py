@@ -1,9 +1,18 @@
 # gui_client_pyqt.py
 
-import sys, socket, struct, threading
+import sys, socket, struct, threading, json
 import cv2, numpy as np
 from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtWidgets import QVBoxLayout, QSpacerItem, QSizePolicy
+
+
+
+with open("client_settings.json") as f:
+    CFG = json.load(f)
+    SERVER_HOST, SERVER_PORT = CFG["SERVER_HOST"], CFG["SERVER_PORT"]
+    TARGET_FPS = CFG["TARGET_FPS"]
+    WIDTH, HEIGHT = CFG["FRAME_WIDTH"], CFG["FRAME_HEIGHT"]
+    JPEG_Q = CFG["JPEG_QUALITY"]
 
 # ─── Network Thread ────────────────────────────────────────────────────────────
 
@@ -84,35 +93,62 @@ class CaptureThread(QtCore.QThread):
 class LoginDialog(QtWidgets.QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Red Light Green Light — Login")
-        layout = QtWidgets.QFormLayout(self)
+        self.setWindowTitle("Login / Signup")
 
-        self.ip_edit = QtWidgets.QLineEdit("127.0.0.1")
-        self.port_edit = QtWidgets.QLineEdit("5000")
-        self.role_combo = QtWidgets.QComboBox()
-        self.role_combo.addItems(["Player", "Spectator"])
+        tabs = QtWidgets.QTabWidget(self)
+        login_tab = QtWidgets.QWidget()
+        signup_tab = QtWidgets.QWidget()
+        tabs.addTab(login_tab, "Login")
+        tabs.addTab(signup_tab, "Signup")
 
-        layout.addRow("Server IP:", self.ip_edit)
-        layout.addRow("Port:", self.port_edit)
-        layout.addRow("Role:", self.role_combo)
+        # Shared fields
+        self.user1 = QtWidgets.QLineEdit()
+        self.pass1 = QtWidgets.QLineEdit()
+        self.pass1.setEchoMode(QtWidgets.QLineEdit.Password)
+        self.user2 = QtWidgets.QLineEdit()
+        self.pass2 = QtWidgets.QLineEdit()
+        self.pass2.setEchoMode(QtWidgets.QLineEdit.Password)
 
-        btn = QtWidgets.QPushButton("Connect")
-        btn.clicked.connect(self.accept)
-        layout.addWidget(btn)
+        # Buttons
+        login_btn = QtWidgets.QPushButton("Login")
+        signup_btn = QtWidgets.QPushButton("Signup")
+        login_btn.clicked.connect(self.do_login)
+        signup_btn.clicked.connect(self.do_signup)
 
-    def get_credentials(self):
-        return (
-            self.ip_edit.text(),
-            int(self.port_edit.text()),
-            self.role_combo.currentText().lower()
-        )
+        # Layout login
+        L1 = QtWidgets.QFormLayout(login_tab)
+        L1.addRow("Username:", self.user1)
+        L1.addRow("Password:", self.pass1)
+        L1.addWidget(login_btn)
+        # Layout signup
+        L2 = QtWidgets.QFormLayout(signup_tab)
+        L2.addRow("Username:", self.user2)
+        L2.addRow("Password:", self.pass2)
+        L2.addWidget(signup_btn)
+
+        main = QtWidgets.QVBoxLayout(self)
+        main.addWidget(tabs)
+
+        self.result = None  # ("login"/"signup", user, pass)
+
+    def do_login(self):
+        self.result = ("login", self.user1.text(), self.pass1.text())
+        self.accept()
+
+    def do_signup(self):
+        self.result = ("signup", self.user2.text(), self.pass2.text())
+        self.accept()
+
+    def get_result(self):
+        return self.result
 
 
 # ─── Main Window ────────────────────────────────────────────────────────────────
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, ip, port, role):
+    def __init__(self, sock, role):
         super().__init__()
+        self.sock = sock
         self.WIDTH = 1200
         self.HEIGHT = 900
         super().resize(self.WIDTH, self.HEIGHT)
@@ -184,9 +220,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statusbar.setObjectName("statusbar")
         self.setStatusBar(self.statusbar)
 
-        # Setup networking
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((ip, port))
 
         # Handshake: send role byte
         self.sock.send(b'P' if role == 'player' else b'S')
@@ -266,11 +299,29 @@ class MainWindow(QtWidgets.QMainWindow):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    dlg = LoginDialog()
-    if dlg.exec_() != QtWidgets.QDialog.Accepted:
-        return
-    ip, port, role = dlg.get_credentials()
-    win = MainWindow(ip, port, role)
+    dialog = LoginDialog()
+    if dialog.exec_() != QtWidgets.QDialog.Accepted:
+        sys.exit(0)
+
+    action, user, pw = dialog.get_result()
+
+    # Connect socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((SERVER_HOST, SERVER_PORT))
+
+    # Send auth JSON
+    msg = json.dumps({"action": action, "user": user, "pass": pw}).encode()
+    sock.send(len(msg).to_bytes(4, "big") + msg)
+
+    # Validate auth
+    raw = sock.recv(4)
+    length = int.from_bytes(raw, "big")
+    reply = json.loads(sock.recv(length).decode())
+    if not reply.get("ok"):
+        QtWidgets.QMessageBox.critical(None, "Auth Failed", reply.geot("error", ""))
+        sys.exit(1)
+
+    win = MainWindow(sock, "player")
     win.show()
     sys.exit(app.exec_())
 
