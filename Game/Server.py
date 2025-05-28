@@ -164,12 +164,16 @@ def handle_auth(sock):
             db.commit()
             reply = {"ok":True}
     else:  # login
-        cur.execute("SELECT pw_hash FROM users WHERE username=?", (username,))
-        row = cur.fetchone()
-        if row and bcrypt.checkpw(password, row[0]):
-            reply = {"ok":True}
+        cur.execute("SELECT 1 FROM users WHERE username=?", (username,))
+        if not cur.fetchone():
+            reply = {"ok":False, "error":"Username not found."}
         else:
-            reply = {"ok":False, "error":"Invalid credentials."}
+            cur.execute("SELECT pw_hash FROM users WHERE username=?", (username,))
+            row = cur.fetchone()
+            if row and bcrypt.checkpw(password, row[0]):
+                reply = {"ok":True}
+            else:
+                reply = {"ok":False, "error":"Password invalid."}
 
     db.close()
 
@@ -189,8 +193,13 @@ def main():
     # accept players
     while len(room.games) < MAX_PLAYERS or cv2.waitKey(1) & 0xFF == ord('s'):
         sock, addr = srv.accept()
-        ok = handle_auth(sock)
-        if not ok:
+        login_sucess = False
+        for i in range(0, 3):
+            ok = handle_auth(sock)
+            if ok:
+                login_sucess = True
+                break
+        if not login_sucess:
             sock.close()
             continue
         role = sock.recv(1)
