@@ -299,26 +299,33 @@ class MainWindow(QtWidgets.QMainWindow):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    dialog = LoginDialog()
-    if dialog.exec_() != QtWidgets.QDialog.Accepted:
-        sys.exit(0)
 
-    action, user, pw = dialog.get_result()
 
     # Connect socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((SERVER_HOST, SERVER_PORT))
+    login_success = False
+    for i in range(0,3):
+        dialog = LoginDialog()
+        if dialog.exec_() != QtWidgets.QDialog.Accepted:
+            sys.exit(0)
+        action, user, pw = dialog.get_result()
+        # Send auth JSON
+        msg = json.dumps({"action": action, "user": user, "pass": pw}).encode()
+        sock.send(len(msg).to_bytes(4, "big") + msg)
 
-    # Send auth JSON
-    msg = json.dumps({"action": action, "user": user, "pass": pw}).encode()
-    sock.send(len(msg).to_bytes(4, "big") + msg)
+        # Validate auth
+        raw = sock.recv(4)
+        length = int.from_bytes(raw, "big")
+        reply = json.loads(sock.recv(length).decode())
+        if reply.get("ok"):
+            login_success = True
+            break
+        else:
+            QtWidgets.QMessageBox.critical(None, "Auth Failed", reply.get("error", "", )+"\n Try again")
 
-    # Validate auth
-    raw = sock.recv(4)
-    length = int.from_bytes(raw, "big")
-    reply = json.loads(sock.recv(length).decode())
-    if not reply.get("ok"):
-        QtWidgets.QMessageBox.critical(None, "Auth Failed", reply.geot("error", ""))
+    if not login_success:
+        QtWidgets.QMessageBox.critical(None, "Auth Failed", "Too many attempts, login failed.")
         sys.exit(1)
 
     win = MainWindow(sock, "player")
