@@ -242,8 +242,8 @@ class Server:
             elif msg["action"] == "join_game":
                 print("join game")
                 role = msg["role"]
-                game_id = msg["game_id"]
-                gr = self.gameRooms[game_id]
+                room_id = msg["room_id"]
+                gr = self.gameRooms[room_id]
                 if gr == None:
                     msg = json.dumps({"ok": False}).encode()
                 else:
@@ -254,8 +254,8 @@ class Server:
                 return
             elif msg["action"] == "start_game":
                 print("start game")
-                game_id = msg["game_id"]
-                gr = self.gameRooms.get(game_id)
+                room_id = msg["room_id"]
+                gr = self.gameRooms.get(room_id)
                 if gr is None:
                     reply = {"ok": False, "error": "Room not found."}
                 else:

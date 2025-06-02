@@ -142,11 +142,164 @@ class LoginDialog(QtWidgets.QDialog):
     def get_result(self):
         return self.result
 
+# ─── Menu Window ────────────────────────────────────────────────────────────────
 
-# ─── Main Window ────────────────────────────────────────────────────────────────
+class MenuWindow(QtWidgets.QMainWindow):
+    def __init__(self, sock, user):
+        super().__init__()
+        self.sock = sock
+        self.user = user
+        self.game_window = None
+        self.setObjectName("MainWindow")
+        self.resize(800, 580)
+        self.setMinimumSize(QtCore.QSize(800, 0))
+        self.setMaximumSize(QtCore.QSize(16777215, 600))
+        palette = QtGui.QPalette()
+        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
+        brush.setStyle(QtCore.Qt.SolidPattern)
+        palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Base, brush)
+        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
+        brush.setStyle(QtCore.Qt.SolidPattern)
+        palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Window, brush)
+        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
+        brush.setStyle(QtCore.Qt.SolidPattern)
+        palette.setBrush(QtGui.QPalette.Inactive, QtGui.QPalette.Base, brush)
+        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
+        brush.setStyle(QtCore.Qt.SolidPattern)
+        palette.setBrush(QtGui.QPalette.Inactive, QtGui.QPalette.Window, brush)
+        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
+        brush.setStyle(QtCore.Qt.SolidPattern)
+        palette.setBrush(QtGui.QPalette.Disabled, QtGui.QPalette.Base, brush)
+        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
+        brush.setStyle(QtCore.Qt.SolidPattern)
+        palette.setBrush(QtGui.QPalette.Disabled, QtGui.QPalette.Window, brush)
+        self.setPalette(palette)
+        self.centralwidget = QtWidgets.QWidget(self)
+        self.centralwidget.setObjectName("centralwidget")
+        self.join_button = QtWidgets.QPushButton(self.centralwidget)
+        self.join_button.setGeometry(QtCore.QRect(0, 180, 241, 61))
+        font = QtGui.QFont()
+        font.setFamily("Arial")
+        font.setPointSize(24)
+        font.setBold(True)
+        font.setItalic(True)
+        font.setWeight(75)
+        self.join_button.setFont(font)
+        self.join_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.join_button.setCheckable(False)
+        self.join_button.setAutoRepeat(False)
+        self.join_button.setFlat(False)
+        self.join_button.setObjectName("join_game")
+        self.create_button = QtWidgets.QPushButton(self.centralwidget)
+        self.create_button.setGeometry(QtCore.QRect(0, 100, 241, 61))
+        font = QtGui.QFont()
+        font.setFamily("Arial")
+        font.setPointSize(24)
+        font.setBold(True)
+        font.setItalic(True)
+        font.setWeight(75)
+        self.create_button.setFont(font)
+        self.create_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.create_button.setTabletTracking(False)
+        self.create_button.setObjectName("create_game")
+        self.Background = QtWidgets.QLabel(self.centralwidget)
+        self.Background.setGeometry(QtCore.QRect(0, 50, 801, 531))
+        self.Background.setText("")
+        self.Background.setPixmap(QtGui.QPixmap("Background.jpg"))
+        self.Background.setScaledContents(True)
+        self.Background.setWordWrap(False)
+        self.Background.setOpenExternalLinks(False)
+        self.Background.setObjectName("Background")
+        self.Logo = QtWidgets.QLabel(self.centralwidget)
+        self.Logo.setGeometry(QtCore.QRect(310, 0, 191, 51))
+        self.Logo.setText("")
+        self.Logo.setPixmap(QtGui.QPixmap("RED LIGHT GREEN LIGHT.png"))
+        self.Logo.setScaledContents(False)
+        self.Logo.setAlignment(QtCore.Qt.AlignCenter)
+        self.Logo.setObjectName("Logo")
+        self.exit_button = QtWidgets.QPushButton(self.centralwidget)
+        self.exit_button.setGeometry(QtCore.QRect(0, 260, 241, 61))
+        font = QtGui.QFont()
+        font.setFamily("Arial")
+        font.setPointSize(24)
+        font.setBold(True)
+        font.setItalic(True)
+        font.setWeight(75)
+        self.exit_button.setFont(font)
+        self.exit_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.exit_button.setCheckable(False)
+        self.exit_button.setAutoRepeat(False)
+        self.exit_button.setFlat(False)
+        self.exit_button.setObjectName("exit")
+        self.Background.raise_()
+        self.create_button.raise_()
+        self.join_button.raise_()
+        self.Logo.raise_()
+        self.exit_button.raise_()
+        self.setCentralWidget(self.centralwidget)
+        self.menubar = QtWidgets.QMenuBar(self)
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 800, 21))
+        self.menubar.setObjectName("menubar")
+        self.setMenuBar(self.menubar)
+        self.statusbar = QtWidgets.QStatusBar(self)
+        self.statusbar.setObjectName("statusbar")
+        self.setStatusBar(self.statusbar)
+        self.retranslateUi()
+        QtCore.QMetaObject.connectSlotsByName(self)
 
-class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, sock, role):
+        self.create_button.pressed.connect(self.create_game)
+        self.join_button.pressed.connect(self.join_game)
+        self.exit_button.pressed.connect(self.exit)
+
+
+    def retranslateUi(self):
+        _translate = QtCore.QCoreApplication.translate
+        self.setWindowTitle(_translate("MainWindow", "MainWindow"))
+        self.join_button.setText(_translate("MainWindow", "Join a game"))
+        self.create_button.setText(_translate("MainWindow", "Create a game"))
+        self.exit_button.setText(_translate("MainWindow", "Exit"))
+
+    def create_game(self):
+        print("create game")
+        msg = json.dumps({
+            "action":       'create_game',
+            "user":         self.user,
+            "role":         "player",
+            "light_duration": 5,
+            "max_players":  1
+        }).encode()
+
+        self.sock.send(len(msg).to_bytes(4, "big") + msg)
+        raw    = self.sock.recv(4)
+        length = int.from_bytes(raw, "big")
+        reply  = json.loads(self.sock.recv(length).decode())
+        room_id = reply.get("room_id")
+
+        if reply.get("ok"):
+            # Instead of a local variable, store it on self:
+            self.hide()   # or `self.close()`
+            self.game_window = GameWindow(self.sock, "player", room_id)
+            self.game_window.show()
+
+
+    def join_game(self):
+        print("join game")
+        room_id = None
+        msg = json.dumps({"action": 'join_game', "role": "player", "room_id": room_id}).encode()
+        self.sock.send(len(msg).to_bytes(4, "big") + msg)
+        raw = self.sock.recv(4)
+        length = int.from_bytes(raw, "big")
+        reply = json.loads(self.sock.recv(length).decode())
+        if reply.get("ok"):
+            win = GameWindow(self.sock, "player", room_id)
+            win.show()
+    def exit(self):
+        sys.exit(1)
+
+# ─── Game Window ────────────────────────────────────────────────────────────────
+
+class GameWindow(QtWidgets.QMainWindow):
+    def __init__(self, sock, role, room_id):
         super().__init__()
         self.sock = sock
         self.WIDTH = 1200
@@ -221,8 +374,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setStatusBar(self.statusbar)
 
 
-        # Handshake: send role byte
-        self.sock.send(b'P' if role == 'player' else b'S')
 
         if role == 'player':
             # 1) Create the Win button as a child of the same frame that holds your video
@@ -305,6 +456,7 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((SERVER_HOST, SERVER_PORT))
     login_success = False
+    user = None
     for i in range(0,3):
         dialog = LoginDialog()
         if dialog.exec_() != QtWidgets.QDialog.Accepted:
@@ -328,7 +480,7 @@ def main():
         QtWidgets.QMessageBox.critical(None, "Auth Failed", "Too many attempts, login failed.")
         sys.exit(1)
 
-    win = MainWindow(sock, "player")
+    win = MenuWindow(sock, user)
     win.show()
     sys.exit(app.exec_())
 
