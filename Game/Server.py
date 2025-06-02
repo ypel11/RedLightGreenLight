@@ -230,6 +230,8 @@ class Server:
             # Create a new game
             if msg["action"] == "create_game":
                 light_duration = msg["light_duration"]
+                if light_duration == "random":
+                    light_duration = random.randint(1, 30)
                 max_players = msg["max_players"]
                 role = msg["role"]
                 gr = GameRoom(light_duration, max_players)

@@ -47,7 +47,6 @@ class NetworkThread(QtCore.QThread):
                 if frame is not None:
                     self.frame_received.emit(frame, red_light)
                 if not game_active:
-                    self.msleep(20000)
                     break
                 self.msleep(33)
         except Exception as e:
@@ -149,61 +148,25 @@ class MenuWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.sock = sock
         self.user = user
-        self.game_window = None
-        self.setObjectName("MainWindow")
-        self.resize(800, 580)
-        self.setMinimumSize(QtCore.QSize(800, 0))
-        self.setMaximumSize(QtCore.QSize(16777215, 600))
+
+        self.setWindowTitle("Red Light Green Light — Main Menu")
+        self.resize(800, 600)
+        self.setMinimumSize(800, 600)
+        self.setMaximumSize(800, 600)
         palette = QtGui.QPalette()
         brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
         brush.setStyle(QtCore.Qt.SolidPattern)
         palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Base, brush)
-        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
-        brush.setStyle(QtCore.Qt.SolidPattern)
         palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Window, brush)
-        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
-        brush.setStyle(QtCore.Qt.SolidPattern)
-        palette.setBrush(QtGui.QPalette.Inactive, QtGui.QPalette.Base, brush)
-        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
-        brush.setStyle(QtCore.Qt.SolidPattern)
-        palette.setBrush(QtGui.QPalette.Inactive, QtGui.QPalette.Window, brush)
-        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
-        brush.setStyle(QtCore.Qt.SolidPattern)
-        palette.setBrush(QtGui.QPalette.Disabled, QtGui.QPalette.Base, brush)
-        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
-        brush.setStyle(QtCore.Qt.SolidPattern)
-        palette.setBrush(QtGui.QPalette.Disabled, QtGui.QPalette.Window, brush)
         self.setPalette(palette)
+
+        # Central widget
         self.centralwidget = QtWidgets.QWidget(self)
-        self.centralwidget.setObjectName("centralwidget")
-        self.join_button = QtWidgets.QPushButton(self.centralwidget)
-        self.join_button.setGeometry(QtCore.QRect(0, 180, 241, 61))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(24)
-        font.setBold(True)
-        font.setItalic(True)
-        font.setWeight(75)
-        self.join_button.setFont(font)
-        self.join_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.join_button.setCheckable(False)
-        self.join_button.setAutoRepeat(False)
-        self.join_button.setFlat(False)
-        self.join_button.setObjectName("join_game")
-        self.create_button = QtWidgets.QPushButton(self.centralwidget)
-        self.create_button.setGeometry(QtCore.QRect(0, 100, 241, 61))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(24)
-        font.setBold(True)
-        font.setItalic(True)
-        font.setWeight(75)
-        self.create_button.setFont(font)
-        self.create_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.create_button.setTabletTracking(False)
-        self.create_button.setObjectName("create_game")
+        self.setCentralWidget(self.centralwidget)
+        # ─── Logo and Background ─────────────────────────────────────────────────────
+
         self.Background = QtWidgets.QLabel(self.centralwidget)
-        self.Background.setGeometry(QtCore.QRect(0, 50, 801, 531))
+        self.Background.setGeometry(QtCore.QRect(0, 50, 801, 511))
         self.Background.setText("")
         self.Background.setPixmap(QtGui.QPixmap("Background.jpg"))
         self.Background.setScaledContents(True)
@@ -217,84 +180,240 @@ class MenuWindow(QtWidgets.QMainWindow):
         self.Logo.setScaledContents(False)
         self.Logo.setAlignment(QtCore.Qt.AlignCenter)
         self.Logo.setObjectName("Logo")
-        self.exit_button = QtWidgets.QPushButton(self.centralwidget)
-        self.exit_button.setGeometry(QtCore.QRect(0, 260, 241, 61))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(24)
-        font.setBold(True)
-        font.setItalic(True)
-        font.setWeight(75)
-        self.exit_button.setFont(font)
+
+        # ─── Widget Group 1: “Main Menu” (Create/Join/Stats/Exit) ─────────────────
+
+        self.main_menu_widget = QtWidgets.QWidget(self.centralwidget)
+        self.main_menu_widget.setGeometry(QtCore.QRect(0, 90, 230, 204))
+        self.main_menu_widget.setObjectName("verticalLayoutWidget")
+        self.main_menu = QtWidgets.QVBoxLayout(self.main_menu_widget)
+        self.main_menu.setContentsMargins(0, 0, 0, 0)
+        self.main_menu.setObjectName("main_menu")
+
+        self.create_button = QtWidgets.QPushButton("Create a game", self.main_menu_widget)
+        self.create_button.setFont(QtGui.QFont("Bernard MT Condensed", 24))
+        self.create_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.create_button.clicked.connect(self.on_create_clicked)
+        self.main_menu.addWidget(self.create_button)
+
+        self.join_button = QtWidgets.QPushButton("Join a game", self.main_menu_widget)
+        self.join_button.setFont(QtGui.QFont("Bernard MT Condensed", 24))
+        self.join_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.join_button.clicked.connect(self.on_join_clicked)
+        self.main_menu.addWidget(self.join_button)
+
+        self.statistics_button = QtWidgets.QPushButton("Statistics", self.main_menu_widget)
+        self.statistics_button.setFont(QtGui.QFont("Bernard MT Condensed", 24))
+        self.statistics_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.main_menu.addWidget(self.statistics_button)
+
+        self.exit_button = QtWidgets.QPushButton("Exit", self.main_menu_widget)
+        self.exit_button.setFont(QtGui.QFont("Bernard MT Condensed", 24))
         self.exit_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.exit_button.setCheckable(False)
-        self.exit_button.setAutoRepeat(False)
-        self.exit_button.setFlat(False)
-        self.exit_button.setObjectName("exit")
-        self.Background.raise_()
-        self.create_button.raise_()
-        self.join_button.raise_()
-        self.Logo.raise_()
-        self.exit_button.raise_()
-        self.setCentralWidget(self.centralwidget)
-        self.menubar = QtWidgets.QMenuBar(self)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 800, 21))
-        self.menubar.setObjectName("menubar")
-        self.setMenuBar(self.menubar)
-        self.statusbar = QtWidgets.QStatusBar(self)
-        self.statusbar.setObjectName("statusbar")
-        self.setStatusBar(self.statusbar)
-        self.retranslateUi()
-        QtCore.QMetaObject.connectSlotsByName(self)
+        self.exit_button.clicked.connect(self.on_exit_clicked)
+        self.main_menu.addWidget(self.exit_button)
 
-        self.create_button.pressed.connect(self.create_game)
-        self.join_button.pressed.connect(self.join_game)
-        self.exit_button.pressed.connect(self.exit)
+        # ─── Widget Group 2: “Game Settings” form ─────────────────────────────────
+
+        self.settings_widget = QtWidgets.QWidget(self.centralwidget)
+        self.settings_widget.setGeometry(0, 90, 500, 400)
+
+        layout2 = QtWidgets.QFormLayout(self.settings_widget)
+        layout2.setContentsMargins(10, 10, 10, 10)
+
+        # Light duration
+        self.light_duration_label = QtWidgets.QLabel("Light duration:", self.settings_widget)
+        self.light_duration_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        layout2.setWidget(0, QtWidgets.QFormLayout.LabelRole, self.light_duration_label)
+
+        self.light_duration_combo = QtWidgets.QComboBox(self.settings_widget)
+        self.light_duration_combo.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.light_duration_combo.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+
+        for val in ["1", "2", "3", "5", "10", "30", "random"]:
+            self.light_duration_combo.addItem(val)
+        layout2.setWidget(0, QtWidgets.QFormLayout.FieldRole, self.light_duration_combo)
+
+        # Max players
+        self.max_players_label = QtWidgets.QLabel("Max players:", self.settings_widget)
+        self.max_players_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+
+        layout2.setWidget(1, QtWidgets.QFormLayout.LabelRole, self.max_players_label)
+
+        self.max_players_combo = QtWidgets.QComboBox(self.settings_widget)
+        self.max_players_combo.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        for i in range(1, 7):
+            self.max_players_combo.addItem(str(i))
+        layout2.setWidget(1, QtWidgets.QFormLayout.FieldRole, self.max_players_combo)
+
+        # Role
+        self.role_label = QtWidgets.QLabel("Role:", self.settings_widget)
+        self.role_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        layout2.setWidget(2, QtWidgets.QFormLayout.LabelRole, self.role_label)
+
+        self.create_role_combo = QtWidgets.QComboBox(self.settings_widget)
+        self.create_role_combo.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.create_role_combo.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+
+        for val in ["player", "spectator"]:
+            self.create_role_combo.addItem(val)
+        layout2.setWidget(2, QtWidgets.QFormLayout.FieldRole, self.create_role_combo)
+
+        # “Create game” and “Back” buttons
+        self.settings_create_button = QtWidgets.QPushButton("Create game", self.settings_widget)
+        self.settings_create_button.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.settings_create_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.settings_create_button.clicked.connect(self.on_settings_create)
+        layout2.setWidget(3, QtWidgets.QFormLayout.FieldRole, self.settings_create_button)
+
+        self.settings_back_button = QtWidgets.QPushButton("Back", self.settings_widget)
+        self.settings_back_button.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.settings_back_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.settings_back_button.clicked.connect(self.on_settings_back)
+        layout2.setWidget(4, QtWidgets.QFormLayout.FieldRole, self.settings_back_button)
+
+        # ─── Widget Group 3: “Join a game” form ───────────────────────────────────
+
+        self.join_widget = QtWidgets.QWidget(self.centralwidget)
+        self.join_widget.setGeometry(0, 90, 400, 150)
+
+        layout3 = QtWidgets.QFormLayout(self.join_widget)
+        layout3.setContentsMargins(10, 10, 10, 10)
+
+        # Game code
+        self.join_label = QtWidgets.QLabel("Game code:", self.join_widget)
+        self.join_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        layout3.setWidget(0, QtWidgets.QFormLayout.LabelRole, self.join_label)
 
 
-    def retranslateUi(self):
-        _translate = QtCore.QCoreApplication.translate
-        self.setWindowTitle(_translate("MainWindow", "MainWindow"))
-        self.join_button.setText(_translate("MainWindow", "Join a game"))
-        self.create_button.setText(_translate("MainWindow", "Create a game"))
-        self.exit_button.setText(_translate("MainWindow", "Exit"))
+        self.join_lineedit = QtWidgets.QLineEdit(self.join_widget)
+        self.join_lineedit.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        layout3.setWidget(0, QtWidgets.QFormLayout.FieldRole, self.join_lineedit)
 
-    def create_game(self):
-        print("create game")
+        # Role
+        self.role_label = QtWidgets.QLabel("Role:", self.settings_widget)
+        self.role_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        layout3.setWidget(1, QtWidgets.QFormLayout.LabelRole, self.role_label)
+
+        self.join_role_combo = QtWidgets.QComboBox(self.settings_widget)
+        self.join_role_combo.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.join_role_combo.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+
+        for val in ["player", "spectator"]:
+            self.join_role_combo.addItem(val)
+        layout3.setWidget(1, QtWidgets.QFormLayout.FieldRole, self.join_role_combo)
+
+        # “Create game” and “Back” buttons
+        self.join_submit_button = QtWidgets.QPushButton("Join game", self.join_widget)
+        self.join_submit_button.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.join_submit_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.join_submit_button.clicked.connect(self.on_join_submit)
+        layout3.setWidget(2, QtWidgets.QFormLayout.FieldRole, self.join_submit_button)
+
+        self.join_back_button = QtWidgets.QPushButton("Back", self.join_widget)
+        self.join_back_button.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.join_back_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.join_back_button.clicked.connect(self.on_join_back)
+        layout3.setWidget(3, QtWidgets.QFormLayout.FieldRole, self.join_back_button)
+
+
+        # Raise the sub‐widgets above the background in the correct z‐order:
+        for w in (self.main_menu_widget, self.settings_widget, self.join_widget, self.Logo):
+            w.raise_()
+
+        # Initially, show only the main menu:
+        self.main_menu_widget.setVisible(True)
+        self.settings_widget.setVisible(False)
+        self.join_widget.setVisible(False)
+
+    # ─── Button callbacks ─────────────────────────────────────────────────────────
+
+    def on_create_clicked(self):
+        # Hide main menu, show settings form:
+        self.main_menu_widget.setVisible(False)
+        self.settings_widget.setVisible(True)
+        self.join_widget.setVisible(False)
+
+    def on_settings_back(self):
+        # Hide settings form, show main menu again
+        self.settings_widget.setVisible(False)
+        self.main_menu_widget.setVisible(True)
+        self.join_widget.setVisible(False)
+
+    def on_settings_create(self):
+        # User clicked “Create game” inside the settings form:
+        light_dur = self.light_duration_combo.currentText()
+        max_pl   = self.max_players_combo.currentText()
+        role = self.create_role_combo.currentText()
+
         msg = json.dumps({
-            "action":       'create_game',
-            "user":         self.user,
-            "role":         "player",
-            "light_duration": 5,
-            "max_players":  1
+            "action":        "create_game",
+            "user":          self.user,
+            "role":          role,
+            "light_duration": int(light_dur) if light_dur.isdigit() else light_dur,
+            "max_players":   int(max_pl)
         }).encode()
 
         self.sock.send(len(msg).to_bytes(4, "big") + msg)
         raw    = self.sock.recv(4)
         length = int.from_bytes(raw, "big")
         reply  = json.loads(self.sock.recv(length).decode())
-        room_id = reply.get("room_id")
-
         if reply.get("ok"):
-            # Instead of a local variable, store it on self:
-            self.hide()   # or `self.close()`
-            self.game_window = GameWindow(self.sock, "player", room_id)
+            room_id = reply.get("room_id")
+            # Now hide _all_ menus, launch game window:
+            self.main_menu_widget.setVisible(False)
+            self.settings_widget.setVisible(False)
+            self.join_widget.setVisible(False)
+
+            self.game_window = GameWindow(self.sock, role, room_id)
             self.game_window.show()
+            self.hide()   # hide this window itself
+        else:
+            QtWidgets.QMessageBox.warning(self, "Error", "Unable to create game")
 
+    def on_join_clicked(self):
+        # Hide main menu, show join form:
+        self.main_menu_widget.setVisible(False)
+        self.join_widget.setVisible(True)
+        self.settings_widget.setVisible(False)
 
-    def join_game(self):
-        print("join game")
-        room_id = None
-        msg = json.dumps({"action": 'join_game', "role": "player", "room_id": room_id}).encode()
+    def on_join_back(self):
+        # Hide join form, go back to main menu:
+        self.join_widget.setVisible(False)
+        self.main_menu_widget.setVisible(True)
+        self.settings_widget.setVisible(False)
+
+    def on_join_submit(self):
+        room_id = self.join_lineedit.text().strip()
+        role = self.join_role_combo.currentText()
+        if not room_id:
+            QtWidgets.QMessageBox.warning(self, "Error", "Please enter a valid Game code.")
+            return
+
+        msg = json.dumps({
+            "action":  "join_game",
+            "user":    self.user,
+            "role":    role,
+            "room_id": room_id
+        }).encode()
         self.sock.send(len(msg).to_bytes(4, "big") + msg)
-        raw = self.sock.recv(4)
+        raw    = self.sock.recv(4)
         length = int.from_bytes(raw, "big")
-        reply = json.loads(self.sock.recv(length).decode())
+        reply  = json.loads(self.sock.recv(length).decode())
         if reply.get("ok"):
-            win = GameWindow(self.sock, "player", room_id)
-            win.show()
-    def exit(self):
-        sys.exit(1)
+            # Hide everything and open the game window:
+            self.main_menu_widget.setVisible(False)
+            self.settings_widget.setVisible(False)
+            self.join_widget.setVisible(False)
+
+            self.game_window = GameWindow(self.sock, role, room_id)
+            self.game_window.show()
+            self.hide()
+        else:
+            QtWidgets.QMessageBox.warning(self, "Error", "Unable to join game")
+
+    def on_exit_clicked(self):
+        self.close()
 
 # ─── Game Window ────────────────────────────────────────────────────────────────
 
@@ -364,6 +483,10 @@ class GameWindow(QtWidgets.QMainWindow):
         self.logo.setPixmap(QtGui.QPixmap("RED LIGHT GREEN LIGHT.png"))
         self.logo.setAlignment(QtCore.Qt.AlignCenter)
         self.logo.setObjectName("logo")
+        self.room_id_label = QtWidgets.QLabel(f"Room ID: {room_id}", self.centralwidget)
+        self.room_id_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.room_id_label.setGeometry(20, 5, 300, 100)
+
         self.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(self)
         self.menubar.setGeometry(QtCore.QRect(0, 0, 1134, 21))
@@ -432,18 +555,12 @@ class GameWindow(QtWidgets.QMainWindow):
         self.video_label.updateGeometry()
 
     def on_finished(self):
-        self.msleep(20000)
         #QtWidgets.QMessageBox.information(self, "Game Over", "The game has ended.")
-        self.close()
-
-    def closeEvent(self, e):
-        # shutdown threads & socket
         if self.role == 'player':
             self.cap_thread.stop()
         self.net_thread.stop()
         try: self.sock.close()
         except Exception as ex: print(ex)
-        super().closeEvent(e)
 
 
 # ─── Entry Point ────────────────────────────────────────────────────────────────
