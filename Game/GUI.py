@@ -540,6 +540,7 @@ class GameWindow(QtWidgets.QMainWindow):
             brush = QtGui.QBrush(QtGui.QColor(0, 191, 99))
         brush.setStyle(QtCore.Qt.SolidPattern)
         palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Window, brush)
+        palette.setBrush(QtGui.QPalette.Inactive, QtGui.QPalette.Window, brush)
         self.frame.setPalette(palette)
 
 
