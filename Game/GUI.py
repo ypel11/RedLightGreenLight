@@ -26,20 +26,12 @@ class NetworkThread(QtCore.QThread):
         self.role = role
         self.running = True
 
-    def recv_all(self, n):
-        data = b''
-        while len(data) < n:
-            packet = self.sock.recv(n - len(data))
-            if not packet:
-                raise ConnectionError()
-            data += packet
-        return data
 
     def run(self):
         try:
             while self.running:
                 # Header: 1 byte game_active (ignored here) + 1 byte alive + 4 bytes size
-                header = self.recv_all(7)
+                header = Utils.recv_all(7)
                 red_light, game_active, alive, size = struct.unpack(">???I", header)
                 payload = self.recv_all(size)
                 arr = np.frombuffer(payload, np.uint8)
