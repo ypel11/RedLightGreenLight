@@ -1,3 +1,4 @@
+
 import socket, threading, struct, time, random, string, pickle, cv2, numpy as np, sqlite3, json, bcrypt
 from GameLogic import Game
 import Utils
@@ -38,6 +39,7 @@ class GameRoom:
             if role == 'spectator':
                 self.spectators.append(sock)
                 return True
+            return False
 
 
 
@@ -203,7 +205,7 @@ class Server:
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.bind((HOST, PORT))
         srv.listen()
-        print(f"Server listening on {PORT} (max {5} players)...")
+        print(f"Server listening on {PORT}")
         while True:
             sock, addr = srv.accept()
             login_success = False
