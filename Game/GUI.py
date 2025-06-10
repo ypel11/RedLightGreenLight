@@ -1,5 +1,6 @@
-# gui_client_pyqt.py
 
+# gui_client_pyqt.py
+import Utils
 import sys, socket, struct, threading, json
 import cv2, numpy as np
 from PyQt5 import QtCore, QtWidgets, QtGui
@@ -31,9 +32,9 @@ class NetworkThread(QtCore.QThread):
         try:
             while self.running:
                 # Header: 1 byte game_active (ignored here) + 1 byte alive + 4 bytes size
-                header = Utils.recv_all(7)
+                header = Utils.recv_all(self.sock, 7)
                 red_light, game_active, alive, size = struct.unpack(">???I", header)
-                payload = self.recv_all(size)
+                payload = Utils.recv_all(self.sock, size)
                 arr = np.frombuffer(payload, np.uint8)
                 frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                 if frame is not None:
@@ -255,13 +256,13 @@ class MenuWindow(QtWidgets.QMainWindow):
         self.settings_create_button = QtWidgets.QPushButton("Create game", self.settings_widget)
         self.settings_create_button.setFont(QtGui.QFont("Bernard MT Condensed", 20))
         self.settings_create_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.settings_create_button.clicked.connect(self.on_settings_create)
+        self.settings_create_button.clicked.connect(self.on_create_submit)
         layout2.setWidget(3, QtWidgets.QFormLayout.FieldRole, self.settings_create_button)
 
         self.settings_back_button = QtWidgets.QPushButton("Back", self.settings_widget)
         self.settings_back_button.setFont(QtGui.QFont("Bernard MT Condensed", 20))
         self.settings_back_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.settings_back_button.clicked.connect(self.on_settings_back)
+        self.settings_back_button.clicked.connect(self.on_create_back)
         layout2.setWidget(4, QtWidgets.QFormLayout.FieldRole, self.settings_back_button)
 
         # ─── Widget Group 3: “Join a game” form ───────────────────────────────────
@@ -326,13 +327,13 @@ class MenuWindow(QtWidgets.QMainWindow):
         self.settings_widget.setVisible(True)
         self.join_widget.setVisible(False)
 
-    def on_settings_back(self):
+    def on_create_back(self):
         # Hide settings form, show main menu again
         self.settings_widget.setVisible(False)
         self.main_menu_widget.setVisible(True)
         self.join_widget.setVisible(False)
 
-    def on_settings_create(self):
+    def on_create_submit(self):
         # User clicked “Create game” inside the settings form:
         light_dur = self.light_duration_combo.currentText()
         max_pl   = self.max_players_combo.currentText()
