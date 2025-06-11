@@ -177,8 +177,8 @@ class MenuWindow(QtWidgets.QMainWindow):
         # ─── Widget Group 1: “Main Menu” (Create/Join/Stats/Exit) ─────────────────
 
         self.main_menu_widget = QtWidgets.QWidget(self.centralwidget)
-        self.main_menu_widget.setGeometry(QtCore.QRect(0, 90, 230, 204))
-        self.main_menu_widget.setObjectName("verticalLayoutWidget")
+        self.main_menu_widget.setGeometry(QtCore.QRect(0, 90, 280, 260))
+        self.main_menu_widget.setObjectName("vrticalLayoutWidget")
         self.main_menu = QtWidgets.QVBoxLayout(self.main_menu_widget)
         self.main_menu.setContentsMargins(0, 0, 0, 0)
         self.main_menu.setObjectName("main_menu")
@@ -268,7 +268,7 @@ class MenuWindow(QtWidgets.QMainWindow):
         # ─── Widget Group 3: “Join a game” form ───────────────────────────────────
 
         self.join_widget = QtWidgets.QWidget(self.centralwidget)
-        self.join_widget.setGeometry(0, 90, 400, 150)
+        self.join_widget.setGeometry(0, 90, 500, 400)
 
         layout3 = QtWidgets.QFormLayout(self.join_widget)
         layout3.setContentsMargins(10, 10, 10, 10)
