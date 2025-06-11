@@ -1,9 +1,12 @@
-# gui_client_pyqt.py
 
+# gui_client_pyqt.py
+import Utils
 import sys, socket, struct, threading, json
 import cv2, numpy as np
 from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtWidgets import QVBoxLayout, QSpacerItem, QSizePolicy
+from Crypto.PublicKey import RSA
+from Crypto.Random import get_random_bytes
 
 
 
@@ -20,34 +23,26 @@ class NetworkThread(QtCore.QThread):
     frame_received = QtCore.pyqtSignal(np.ndarray, bool)
     finished = QtCore.pyqtSignal()
 
-    def __init__(self, sock, role):
+    def __init__(self, sock, aes, role):
         super().__init__()
         self.sock = sock
+        self.aes = aes
         self.role = role
         self.running = True
 
-    def recv_all(self, n):
-        data = b''
-        while len(data) < n:
-            packet = self.sock.recv(n - len(data))
-            if not packet:
-                raise ConnectionError()
-            data += packet
-        return data
 
     def run(self):
         try:
             while self.running:
                 # Header: 1 byte game_active (ignored here) + 1 byte alive + 4 bytes size
-                header = self.recv_all(7)
-                red_light, game_active, alive, size = struct.unpack(">???I", header)
-                payload = self.recv_all(size)
+                header = Utils.recv_encrypted(self.sock, self.aes)
+                red_light, game_active, alive, size = struct.unpack(">???", header[:3])
+                payload = header[2:]
                 arr = np.frombuffer(payload, np.uint8)
                 frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                 if frame is not None:
                     self.frame_received.emit(frame, red_light)
                 if not game_active:
-                    self.msleep(20000)
                     break
                 self.msleep(33)
         except Exception as e:
@@ -142,13 +137,288 @@ class LoginDialog(QtWidgets.QDialog):
     def get_result(self):
         return self.result
 
+# ─── Menu Window ────────────────────────────────────────────────────────────────
 
-# ─── Main Window ────────────────────────────────────────────────────────────────
-
-class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, sock, role):
+class MenuWindow(QtWidgets.QMainWindow):
+    def __init__(self, sock, aes, user):
         super().__init__()
         self.sock = sock
+        self.aes = aes
+        self.user = user
+
+        self.setWindowTitle("Red Light Green Light — Main Menu")
+        self.resize(800, 600)
+        self.setMinimumSize(800, 600)
+        self.setMaximumSize(800, 600)
+        palette = QtGui.QPalette()
+        brush = QtGui.QBrush(QtGui.QColor(255, 255, 255))
+        brush.setStyle(QtCore.Qt.SolidPattern)
+        palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Base, brush)
+        palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Window, brush)
+        self.setPalette(palette)
+
+        # Central widget
+        self.centralwidget = QtWidgets.QWidget(self)
+        self.setCentralWidget(self.centralwidget)
+        # ─── Logo and Background ─────────────────────────────────────────────────────
+
+        self.Background = QtWidgets.QLabel(self.centralwidget)
+        self.Background.setGeometry(QtCore.QRect(0, 50, 801, 511))
+        self.Background.setText("")
+        self.Background.setPixmap(QtGui.QPixmap("Background.jpg"))
+        self.Background.setScaledContents(True)
+        self.Background.setWordWrap(False)
+        self.Background.setOpenExternalLinks(False)
+        self.Background.setObjectName("Background")
+        self.Logo = QtWidgets.QLabel(self.centralwidget)
+        self.Logo.setGeometry(QtCore.QRect(310, 0, 191, 51))
+        self.Logo.setText("")
+        self.Logo.setPixmap(QtGui.QPixmap("RED LIGHT GREEN LIGHT.png"))
+        self.Logo.setScaledContents(False)
+        self.Logo.setAlignment(QtCore.Qt.AlignCenter)
+        self.Logo.setObjectName("Logo")
+
+        # ─── Widget Group 1: “Main Menu” (Create/Join/Stats/Exit) ─────────────────
+
+        self.main_menu_widget = QtWidgets.QWidget(self.centralwidget)
+        self.main_menu_widget.setGeometry(QtCore.QRect(0, 90, 230, 204))
+        self.main_menu_widget.setObjectName("verticalLayoutWidget")
+        self.main_menu = QtWidgets.QVBoxLayout(self.main_menu_widget)
+        self.main_menu.setContentsMargins(0, 0, 0, 0)
+        self.main_menu.setObjectName("main_menu")
+
+        self.create_button = QtWidgets.QPushButton("Create a game", self.main_menu_widget)
+        self.create_button.setFont(QtGui.QFont("Bernard MT Condensed", 24))
+        self.create_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.create_button.clicked.connect(self.on_create_clicked)
+        self.main_menu.addWidget(self.create_button)
+
+        self.join_button = QtWidgets.QPushButton("Join a game", self.main_menu_widget)
+        self.join_button.setFont(QtGui.QFont("Bernard MT Condensed", 24))
+        self.join_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.join_button.clicked.connect(self.on_join_clicked)
+        self.main_menu.addWidget(self.join_button)
+
+        self.statistics_button = QtWidgets.QPushButton("Statistics", self.main_menu_widget)
+        self.statistics_button.setFont(QtGui.QFont("Bernard MT Condensed", 24))
+        self.statistics_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.main_menu.addWidget(self.statistics_button)
+
+        self.exit_button = QtWidgets.QPushButton("Exit", self.main_menu_widget)
+        self.exit_button.setFont(QtGui.QFont("Bernard MT Condensed", 24))
+        self.exit_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.exit_button.clicked.connect(self.on_exit_clicked)
+        self.main_menu.addWidget(self.exit_button)
+
+        # ─── Widget Group 2: “Game Settings” form ─────────────────────────────────
+
+        self.settings_widget = QtWidgets.QWidget(self.centralwidget)
+        self.settings_widget.setGeometry(0, 90, 500, 400)
+
+        layout2 = QtWidgets.QFormLayout(self.settings_widget)
+        layout2.setContentsMargins(10, 10, 10, 10)
+
+        # Light duration
+        self.light_duration_label = QtWidgets.QLabel("Light duration:", self.settings_widget)
+        self.light_duration_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        layout2.setWidget(0, QtWidgets.QFormLayout.LabelRole, self.light_duration_label)
+
+        self.light_duration_combo = QtWidgets.QComboBox(self.settings_widget)
+        self.light_duration_combo.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.light_duration_combo.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+
+        for val in ["1", "2", "3", "5", "10", "30", "random"]:
+            self.light_duration_combo.addItem(val)
+        layout2.setWidget(0, QtWidgets.QFormLayout.FieldRole, self.light_duration_combo)
+
+        # Max players
+        self.max_players_label = QtWidgets.QLabel("Max players:", self.settings_widget)
+        self.max_players_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+
+        layout2.setWidget(1, QtWidgets.QFormLayout.LabelRole, self.max_players_label)
+
+        self.max_players_combo = QtWidgets.QComboBox(self.settings_widget)
+        self.max_players_combo.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        for i in range(1, 7):
+            self.max_players_combo.addItem(str(i))
+        layout2.setWidget(1, QtWidgets.QFormLayout.FieldRole, self.max_players_combo)
+
+        # Role
+        self.role_label = QtWidgets.QLabel("Role:", self.settings_widget)
+        self.role_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        layout2.setWidget(2, QtWidgets.QFormLayout.LabelRole, self.role_label)
+
+        self.create_role_combo = QtWidgets.QComboBox(self.settings_widget)
+        self.create_role_combo.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.create_role_combo.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+
+        for val in ["player", "spectator"]:
+            self.create_role_combo.addItem(val)
+        layout2.setWidget(2, QtWidgets.QFormLayout.FieldRole, self.create_role_combo)
+
+        # “Create game” and “Back” buttons
+        self.settings_create_button = QtWidgets.QPushButton("Create game", self.settings_widget)
+        self.settings_create_button.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.settings_create_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.settings_create_button.clicked.connect(self.on_create_submit)
+        layout2.setWidget(3, QtWidgets.QFormLayout.FieldRole, self.settings_create_button)
+
+        self.settings_back_button = QtWidgets.QPushButton("Back", self.settings_widget)
+        self.settings_back_button.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.settings_back_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.settings_back_button.clicked.connect(self.on_create_back)
+        layout2.setWidget(4, QtWidgets.QFormLayout.FieldRole, self.settings_back_button)
+
+        # ─── Widget Group 3: “Join a game” form ───────────────────────────────────
+
+        self.join_widget = QtWidgets.QWidget(self.centralwidget)
+        self.join_widget.setGeometry(0, 90, 400, 150)
+
+        layout3 = QtWidgets.QFormLayout(self.join_widget)
+        layout3.setContentsMargins(10, 10, 10, 10)
+
+        # Game code
+        self.join_label = QtWidgets.QLabel("Game code:", self.join_widget)
+        self.join_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        layout3.setWidget(0, QtWidgets.QFormLayout.LabelRole, self.join_label)
+
+
+        self.join_lineedit = QtWidgets.QLineEdit(self.join_widget)
+        self.join_lineedit.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        layout3.setWidget(0, QtWidgets.QFormLayout.FieldRole, self.join_lineedit)
+
+        # Role
+        self.role_label = QtWidgets.QLabel("Role:", self.settings_widget)
+        self.role_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        layout3.setWidget(1, QtWidgets.QFormLayout.LabelRole, self.role_label)
+
+        self.join_role_combo = QtWidgets.QComboBox(self.settings_widget)
+        self.join_role_combo.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.join_role_combo.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+
+        for val in ["player", "spectator"]:
+            self.join_role_combo.addItem(val)
+        layout3.setWidget(1, QtWidgets.QFormLayout.FieldRole, self.join_role_combo)
+
+        # “Create game” and “Back” buttons
+        self.join_submit_button = QtWidgets.QPushButton("Join game", self.join_widget)
+        self.join_submit_button.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.join_submit_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.join_submit_button.clicked.connect(self.on_join_submit)
+        layout3.setWidget(2, QtWidgets.QFormLayout.FieldRole, self.join_submit_button)
+
+        self.join_back_button = QtWidgets.QPushButton("Back", self.join_widget)
+        self.join_back_button.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.join_back_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.join_back_button.clicked.connect(self.on_join_back)
+        layout3.setWidget(3, QtWidgets.QFormLayout.FieldRole, self.join_back_button)
+
+
+        # Raise the sub‐widgets above the background in the correct z‐order:
+        for w in (self.main_menu_widget, self.settings_widget, self.join_widget, self.Logo):
+            w.raise_()
+
+        # Initially, show only the main menu:
+        self.main_menu_widget.setVisible(True)
+        self.settings_widget.setVisible(False)
+        self.join_widget.setVisible(False)
+
+    # ─── Button callbacks ─────────────────────────────────────────────────────────
+
+    def on_create_clicked(self):
+        # Hide main menu, show settings form:
+        self.main_menu_widget.setVisible(False)
+        self.settings_widget.setVisible(True)
+        self.join_widget.setVisible(False)
+
+    def on_create_back(self):
+        # Hide settings form, show main menu again
+        self.settings_widget.setVisible(False)
+        self.main_menu_widget.setVisible(True)
+        self.join_widget.setVisible(False)
+
+    def on_create_submit(self):
+        # User clicked “Create game” inside the settings form:
+        light_dur = self.light_duration_combo.currentText()
+        max_pl   = self.max_players_combo.currentText()
+        role = self.create_role_combo.currentText()
+
+        msg = json.dumps({
+            "action":        "create_game",
+            "user":          self.user,
+            "role":          role,
+            "light_duration": int(light_dur) if light_dur.isdigit() else light_dur,
+            "max_players":   int(max_pl)
+        }).encode()
+
+        self.sock.send(len(msg).to_bytes(4, "big") + msg)
+        raw    = self.sock.recv(4)
+        length = int.from_bytes(raw, "big")
+        reply  = json.loads(self.sock.recv(length).decode())
+        if reply.get("ok"):
+            room_id = reply.get("room_id")
+            # Now hide _all_ menus, launch game window:
+            self.main_menu_widget.setVisible(False)
+            self.settings_widget.setVisible(False)
+            self.join_widget.setVisible(False)
+
+            self.game_window = GameWindow(self.sock, role, room_id)
+            self.game_window.show()
+            self.hide()   # hide this window itself
+        else:
+            QtWidgets.QMessageBox.warning(self, "Error", "Unable to create game")
+
+    def on_join_clicked(self):
+        # Hide main menu, show join form:
+        self.main_menu_widget.setVisible(False)
+        self.join_widget.setVisible(True)
+        self.settings_widget.setVisible(False)
+
+    def on_join_back(self):
+        # Hide join form, go back to main menu:
+        self.join_widget.setVisible(False)
+        self.main_menu_widget.setVisible(True)
+        self.settings_widget.setVisible(False)
+
+    def on_join_submit(self):
+        room_id = self.join_lineedit.text().strip()
+        role = self.join_role_combo.currentText()
+        if not room_id:
+            QtWidgets.QMessageBox.warning(self, "Error", "Please enter a valid Game code.")
+            return
+
+        msg = json.dumps({
+            "action":  "join_game",
+            "user":    self.user,
+            "role":    role,
+            "room_id": room_id
+        }).encode()
+        self.sock.send(len(msg).to_bytes(4, "big") + msg)
+        raw    = self.sock.recv(4)
+        length = int.from_bytes(raw, "big")
+        reply  = json.loads(self.sock.recv(length).decode())
+        if reply.get("ok"):
+            # Hide everything and open the game window:
+            self.main_menu_widget.setVisible(False)
+            self.settings_widget.setVisible(False)
+            self.join_widget.setVisible(False)
+
+            self.game_window = GameWindow(self.sock, self.aes, role, room_id)
+            self.game_window.show()
+            self.hide()
+        else:
+            QtWidgets.QMessageBox.warning(self, "Error", "Unable to join game")
+
+    def on_exit_clicked(self):
+        self.close()
+
+# ─── Game Window ────────────────────────────────────────────────────────────────
+
+class GameWindow(QtWidgets.QMainWindow):
+    def __init__(self, sock, aes, role, room_id):
+        super().__init__()
+        self.sock = sock
+        self.aes = aes
         self.WIDTH = 1200
         self.HEIGHT = 900
         super().resize(self.WIDTH, self.HEIGHT)
@@ -211,6 +481,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.logo.setPixmap(QtGui.QPixmap("RED LIGHT GREEN LIGHT.png"))
         self.logo.setAlignment(QtCore.Qt.AlignCenter)
         self.logo.setObjectName("logo")
+        self.room_id_label = QtWidgets.QLabel(f"Room ID: {room_id}", self.centralwidget)
+        self.room_id_label.setFont(QtGui.QFont("Bernard MT Condensed", 20))
+        self.room_id_label.setGeometry(20, 5, 300, 100)
+
         self.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(self)
         self.menubar.setGeometry(QtCore.QRect(0, 0, 1134, 21))
@@ -221,8 +495,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setStatusBar(self.statusbar)
 
 
-        # Handshake: send role byte
-        self.sock.send(b'P' if role == 'player' else b'S')
 
         if role == 'player':
             # 1) Create the Win button as a child of the same frame that holds your video
@@ -242,7 +514,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.cap_thread.start()
 
         # Threads
-        self.net_thread = NetworkThread(self.sock, role)
+        self.net_thread = NetworkThread(self.sock, self.aes, role)
         self.net_thread.frame_received.connect(self.update_frame)
         self.net_thread.finished.connect(self.on_finished)
         self.net_thread.start()
@@ -250,13 +522,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def button_pressed(self):
         self.win_flag = True
-    def on_send_frame(self, data):
+    def on_send_frame(self, buffer):
         # header: 1 byte win + 4 byte size
-        header = struct.pack(">?I",  self.win_flag, len(data))
-        try:
-            self.sock.sendall(header + data)
-        except Exception as e:
-            print(e)
+        plaintext = struct.pack(">?",  self.win_flag) + buffer
+        Utils.send_encrypted(self.sock, self.aes, plaintext)
+
 
     def update_background(self, red_light : bool):
         palette = QtGui.QPalette()
@@ -266,6 +536,7 @@ class MainWindow(QtWidgets.QMainWindow):
             brush = QtGui.QBrush(QtGui.QColor(0, 191, 99))
         brush.setStyle(QtCore.Qt.SolidPattern)
         palette.setBrush(QtGui.QPalette.Active, QtGui.QPalette.Window, brush)
+        palette.setBrush(QtGui.QPalette.Inactive, QtGui.QPalette.Window, brush)
         self.frame.setPalette(palette)
 
 
@@ -281,18 +552,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.video_label.updateGeometry()
 
     def on_finished(self):
-        self.msleep(20000)
         #QtWidgets.QMessageBox.information(self, "Game Over", "The game has ended.")
-        self.close()
-
-    def closeEvent(self, e):
-        # shutdown threads & socket
         if self.role == 'player':
             self.cap_thread.stop()
         self.net_thread.stop()
         try: self.sock.close()
         except Exception as ex: print(ex)
-        super().closeEvent(e)
 
 
 # ─── Entry Point ────────────────────────────────────────────────────────────────
@@ -301,10 +566,25 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
 
 
-    # Connect socket
+
+    # 1) Create raw TCP socket and connect
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((SERVER_HOST, SERVER_PORT))
+
+    # 2) Immediately receive the RSA public key length + bytes
+    raw_len = Utils.recv_all(sock, 4)
+    pub_len = int.from_bytes(raw_len, "big")
+    pub_der = Utils.recv_all(sock, pub_len)
+    server_rsa_pub = RSA.import_key(pub_der)
+
+    # 3) Generate a new AES key, encrypt it under RSA, send to server
+    aes_key = get_random_bytes(16)  # 128 bits
+    enc_aes = Utils.rsa_encrypt(server_rsa_pub, aes_key)
+    sock.send(len(enc_aes).to_bytes(4, "big") + enc_aes)
+
+    # 4) Now loop over login/signup: everything is under AES
     login_success = False
+    user = None
     for i in range(0,3):
         dialog = LoginDialog()
         if dialog.exec_() != QtWidgets.QDialog.Accepted:
@@ -312,12 +592,11 @@ def main():
         action, user, pw = dialog.get_result()
         # Send auth JSON
         msg = json.dumps({"action": action, "user": user, "pass": pw}).encode()
-        sock.send(len(msg).to_bytes(4, "big") + msg)
+        Utils.send_encrypted(sock, aes_key, msg)
 
         # Validate auth
-        raw = sock.recv(4)
-        length = int.from_bytes(raw, "big")
-        reply = json.loads(sock.recv(length).decode())
+        raw = Utils.recv_encrypted(sock, aes_key)
+        reply = json.loads(raw)
         if reply.get("ok"):
             login_success = True
             break
@@ -328,7 +607,7 @@ def main():
         QtWidgets.QMessageBox.critical(None, "Auth Failed", "Too many attempts, login failed.")
         sys.exit(1)
 
-    win = MainWindow(sock, "player")
+    win = MenuWindow(sock, aes_key, user)
     win.show()
     sys.exit(app.exec_())
 
