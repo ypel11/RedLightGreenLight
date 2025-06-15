@@ -1,7 +1,5 @@
-import struct
 import numpy as np
-import cv2
-import pickle
+import threading
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP, AES
 from Crypto.Random import get_random_bytes
@@ -33,6 +31,7 @@ def rsa_decrypt(private_key: RSA.RsaKey, ciphertext: bytes) -> bytes:
 AES_NONCE_SIZE = 12   # recommended for GCM
 AES_TAG_SIZE = 16     # GCM authentication tag = 16 bytes
 
+
 def aes_encrypt(aes_key: bytes, plaintext: bytes) -> bytes:
     """
     Returns a bytes object: 12‐byte nonce || ciphertext || 16‐byte tag.
@@ -57,12 +56,12 @@ def aes_decrypt(aes_key: bytes, data: bytes) -> bytes:
 # 4) “send_encrypted” / “recv_encrypted” wrappers over a socket
 #    We prefix each encrypted blob with a 4‐byte big‐endian length.
 #
-def send_encrypted(sock, aes_key: bytes, plaintext: bytes):
-    """
-    Encrypts plaintext with aes_key (AES‐GCM) and sends length + blob.
-    """
+send_lock = threading.Lock()
+def send_encrypted(sock, aes_key, plaintext):
     blob = aes_encrypt(aes_key, plaintext)
-    sock.sendall(len(blob).to_bytes(4, "big") + blob)
+    msg = len(blob).to_bytes(4, "big") + blob
+    with send_lock:
+        sock.sendall(msg)
 
 def recv_encrypted(sock, aes_key: bytes) -> bytes:
     """
@@ -110,15 +109,8 @@ def recv_encrypted(sock, aes_key: bytes) -> bytes:
         raise
 
 
-def send_frame(sock, frame, recv_more, send_more, red_light):
-    # overlay alive_flag or whatever on frame first…
-    success, jpg = cv2.imencode('.jpg', frame)
-    if not success:
-        return
-    buffer = jpg.tobytes()
-    # send 1 byte alive_flag + 4 bytes length + raw JPEG
-    sock.send(struct.pack(">???I",  red_light, recv_more, send_more, len(buffer)))
-    sock.send(buffer)
+
+
 def recv_all(sock, n):
     data = b""
     while len(data) < n:
