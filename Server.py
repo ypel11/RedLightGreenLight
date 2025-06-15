@@ -1,5 +1,5 @@
 
-import socket, threading, struct, time, random, string, pickle, cv2, numpy as np, sqlite3, json, bcrypt
+import socket, threading, struct, time, random, string, cv2, numpy as np, sqlite3, json, bcrypt
 from GameLogic import Game
 import Utils
 HOST = '0.0.0.0'
@@ -84,6 +84,7 @@ class GameRoom:
                         break
                     game = info['game']
                     sock = info['sock']
+                    aes = info['aes']
                     if info['frame'] is None:
                         continue
                     frame, win_flag = info['frame']
@@ -100,7 +101,7 @@ class GameRoom:
                         return
                     buffer = jpg.tobytes()
                     plaintext = struct.pack(">???", True, alive, self.red_light) + buffer
-                    Utils.send_encrypted(sock, frame, plaintext)
+                    Utils.send_encrypted(sock, aes, plaintext)
                     # Check if player lost
                     if alive:
                         alive_frames.append(frame)
@@ -166,8 +167,16 @@ class Server:
         c = conn.cursor()
         c.execute("""
             CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            pw_hash BLOB
+                username TEXT PRIMARY KEY,
+                pw_hash   BLOB
+            )
+        """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS results (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                username  TEXT,
+                won       INTEGER,           -- 1 = win, 0 = loss
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
         conn.commit()
@@ -218,7 +227,7 @@ class Server:
         # Send the JSON reply under AES encryption
         out = json.dumps(reply).encode()
         Utils.send_encrypted(sock, aes_key, out)
-        return (username, reply["ok"])
+        return username, reply["ok"]
 
     def accept_loop(self):
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -261,7 +270,7 @@ class Server:
             print(f"[Server] {username} authenticated, AES key established.")
 
             threading.Thread(
-                target=self.handle_user_request,
+                 target=self.handle_user_request,
                 args=(username, ),
                 daemon=True
             ).start()
@@ -290,9 +299,9 @@ class Server:
                 gr = GameRoom(light_duration, max_players)
                 self.gameRooms[gr.room_id] = gr
                 success = gr.add_player(user, sock, aes_key, role)
-                print(f"{user} joined the game {success}")
                 reply = {"ok": success, "room_id": gr.room_id}
                 Utils.send_encrypted(sock, aes_key, json.dumps(reply).encode())
+                break
 
             elif action == "join_game":
                 room_id = msg["room_id"]
@@ -308,6 +317,7 @@ class Server:
                     else:
                         reply = {"ok": False, "error": "Could not join"}
                     Utils.send_encrypted(sock, aes_key, json.dumps(reply).encode())
+                    break
 
             elif action == "start_game":
                 room_id = msg["room_id"]
@@ -319,18 +329,19 @@ class Server:
                     threading.Thread(target=gr.game_loop, daemon=True).start()
                     reply = {"ok": True}
                 Utils.send_encrypted(sock, aes_key, json.dumps(reply).encode())
+                break
 
             elif action == "exit":
                 reply = {"ok": True}
                 Utils.send_encrypted(sock, aes_key, json.dumps(reply).encode())
                 try: sock.close()
                 except: pass
-                return
+                break
 
             else:
                 reply = {"ok": False, "error": "Unknown action"}
                 Utils.send_encrypted(sock, aes_key, json.dumps(reply).encode())
-                return
+                break
 
 def main():
     server = Server()
