@@ -136,8 +136,14 @@ class GameRoom:
             return
         buffer = jpg.tobytes()
         plaintext = struct.pack(">???", False, False, self.red_light) + buffer
+        conn = sqlite3.connect("Users.db")
+        c = conn.cursor()
         for info in self.users.values():
             Utils.send_encrypted(info['sock'], info['aes'], plaintext)
+            won = int(self.winner is not None and self.winner[0] == user)
+            c.execute("INSERT INTO results(username, won) VALUES (?, ?)", (user, won))
+        conn.commit()
+        conn.close()
         for spec, aes in self.spectators:
             Utils.send_encrypted(sock, aes, plaintext)
 
@@ -330,6 +336,24 @@ class Server:
                     reply = {"ok": True}
                 Utils.send_encrypted(sock, aes_key, json.dumps(reply).encode())
                 break
+
+            elif action == "get_stats":
+                # pull tallies for this user
+                conn = sqlite3.connect(self.DB)
+                c = conn.cursor()
+                c.execute("SELECT COUNT(*) FROM results WHERE username=?", (user,))
+                games = c.fetchone()[0]
+                c.execute("SELECT COUNT(*) FROM results WHERE username=? AND won=1", (user,))
+                wins = c.fetchone()[0]
+                conn.close()
+                losses = games - wins
+                reply = {
+                    "ok": True,
+                    "games_played": games,
+                    "wins": wins,
+                    "losses": losses
+                }
+                Utils.send_encrypted(sock, aes_key, json.dumps(reply).encode())
 
             elif action == "exit":
                 reply = {"ok": True}
