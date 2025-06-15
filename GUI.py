@@ -36,8 +36,8 @@ class NetworkThread(QtCore.QThread):
             while self.running:
                 # Header: 1 byte game_active (ignored here) + 1 byte alive + 4 bytes size
                 header = Utils.recv_encrypted(self.sock, self.aes)
-                red_light, game_active, alive, size = struct.unpack(">???", header[:3])
-                payload = header[2:]
+                game_active, alive, red_light = struct.unpack(">???", header[:3])
+                payload = header[3:]
                 arr = np.frombuffer(payload, np.uint8)
                 frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                 if frame is not None:
@@ -181,7 +181,7 @@ class MenuWindow(QtWidgets.QMainWindow):
         # ─── Widget Group 1: “Main Menu” (Create/Join/Stats/Exit) ─────────────────
 
         self.main_menu_widget = QtWidgets.QWidget(self.centralwidget)
-        self.main_menu_widget.setGeometry(QtCore.QRect(0, 90, 230, 204))
+        self.main_menu_widget.setGeometry(QtCore.QRect(0, 90, 280, 260))
         self.main_menu_widget.setObjectName("verticalLayoutWidget")
         self.main_menu = QtWidgets.QVBoxLayout(self.main_menu_widget)
         self.main_menu.setContentsMargins(0, 0, 0, 0)
@@ -202,6 +202,8 @@ class MenuWindow(QtWidgets.QMainWindow):
         self.statistics_button = QtWidgets.QPushButton("Statistics", self.main_menu_widget)
         self.statistics_button.setFont(QtGui.QFont("Bernard MT Condensed", 24))
         self.statistics_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.statistics_button.clicked.connect(self.on_statistics_clicked)
+
         self.main_menu.addWidget(self.statistics_button)
 
         self.exit_button = QtWidgets.QPushButton("Exit", self.main_menu_widget)
@@ -272,7 +274,7 @@ class MenuWindow(QtWidgets.QMainWindow):
         # ─── Widget Group 3: “Join a game” form ───────────────────────────────────
 
         self.join_widget = QtWidgets.QWidget(self.centralwidget)
-        self.join_widget.setGeometry(0, 90, 400, 150)
+        self.join_widget.setGeometry(0, 90, 500, 400)
 
         layout3 = QtWidgets.QFormLayout(self.join_widget)
         layout3.setContentsMargins(10, 10, 10, 10)
@@ -340,21 +342,20 @@ class MenuWindow(QtWidgets.QMainWindow):
     def on_create_submit(self):
         # User clicked “Create game” inside the settings form:
         light_dur = self.light_duration_combo.currentText()
-        max_pl   = self.max_players_combo.currentText()
+        max_pl = self.max_players_combo.currentText()
         role = self.create_role_combo.currentText()
 
         msg = json.dumps({
-            "action":        "create_game",
-            "user":          self.user,
-            "role":          role,
+            "action": "create_game",
+            "user": self.user,
+            "role": role,
             "light_duration": int(light_dur) if light_dur.isdigit() else light_dur,
-            "max_players":   int(max_pl)
+            "max_players": int(max_pl)
         }).encode()
 
-        self.sock.send(len(msg).to_bytes(4, "big") + msg)
-        raw    = self.sock.recv(4)
-        length = int.from_bytes(raw, "big")
-        reply  = json.loads(self.sock.recv(length).decode())
+        Utils.send_encrypted(self.sock, self.aes, msg)
+        reply_buffer = Utils.recv_encrypted(self.sock, self.aes)
+        reply = json.loads(reply_buffer)
         if reply.get("ok"):
             room_id = reply.get("room_id")
             # Now hide _all_ menus, launch game window:
@@ -362,9 +363,9 @@ class MenuWindow(QtWidgets.QMainWindow):
             self.settings_widget.setVisible(False)
             self.join_widget.setVisible(False)
 
-            self.game_window = GameWindow(self.sock, role, room_id)
+            self.game_window = GameWindow(self.sock, self.aes, role, room_id)
             self.game_window.show()
-            self.hide()   # hide this window itself
+            self.hide()  # hide this window itself
         else:
             QtWidgets.QMessageBox.warning(self, "Error", "Unable to create game")
 
@@ -393,10 +394,9 @@ class MenuWindow(QtWidgets.QMainWindow):
             "role":    role,
             "room_id": room_id
         }).encode()
-        self.sock.send(len(msg).to_bytes(4, "big") + msg)
-        raw    = self.sock.recv(4)
-        length = int.from_bytes(raw, "big")
-        reply  = json.loads(self.sock.recv(length).decode())
+        Utils.send_encrypted(self.sock, self.aes, msg)
+        reply_buffer = Utils.recv_encrypted(self.sock, self.aes)
+        reply = json.loads(reply_buffer)
         if reply.get("ok"):
             # Hide everything and open the game window:
             self.main_menu_widget.setVisible(False)
@@ -409,6 +409,27 @@ class MenuWindow(QtWidgets.QMainWindow):
         else:
             QtWidgets.QMessageBox.warning(self, "Error", "Unable to join game")
 
+    def on_statistics_clicked(self):
+        # ask the server for stats
+        msg = json.dumps({"action": "get_stats", "user": self.user}).encode()
+        Utils.send_encrypted(self.sock, self.aes, msg)
+
+        raw = Utils.recv_encrypted(self.sock, self.aes)
+        resp = json.loads(raw)
+        if not resp.get("ok"):
+            QtWidgets.QMessageBox.warning(self, "Stats Error", "Couldn’t fetch statistics.")
+            return
+
+        games = resp["games_played"]
+        wins = resp["wins"]
+        losses = resp["losses"]
+        rate = (wins / games * 100) if games else 0
+
+        text = (f"Games played: {games}\n"
+                f"Wins: {wins}\n"
+                f"Losses: {losses}\n"
+                f"Win rate: {rate:.1f}%")
+        QtWidgets.QMessageBox.information(self, "Your Statistics", text)
     def on_exit_clicked(self):
         self.close()
 
@@ -564,8 +585,6 @@ class GameWindow(QtWidgets.QMainWindow):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-
-
 
     # 1) Create raw TCP socket and connect
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
