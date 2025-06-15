@@ -1,3 +1,4 @@
+
 import cv2
 import numpy as np
 import imutils
@@ -26,7 +27,7 @@ class Game:
 
 
     def check_lost(self):
-        # Conditions for game lose
+        # Check if everyone lost
         canvas = None
         if (self.frame_count > 5 and (not any(self.players_status.values()))):
             self.active = False
@@ -36,7 +37,7 @@ class Game:
         return canvas
 
     def get_winner(self):
-        # Find the player with the largest area
+        # Find the winner player by getting the player with the largest bounding box area(closest to the camara usually)
         max_area = 0
         winner_id = None
         for track_id, (_, _, area) in self.players_position.items():
@@ -64,6 +65,9 @@ class Game:
         return detections
 
     def update_values(self, frame, win):
+        if frame is None:
+            raise ValueError("Decoded JPEG frame is None")
+
         # Update frame count
         self.frame_count = self.frame_count + 1
 
