@@ -1,10 +1,12 @@
 
 # gui_client_pyqt.py
 import Utils
-import sys, socket, struct, threading, json
+import sys, socket, struct, threading, json, winsound
 import cv2, numpy as np
 from PyQt5 import QtCore, QtWidgets, QtGui
 from PyQt5.QtWidgets import QVBoxLayout, QSpacerItem, QSizePolicy
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+from PyQt5.QtCore import QUrl
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 
@@ -440,6 +442,9 @@ class GameWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.sock = sock
         self.aes = aes
+        self.last_red = False
+        self.media_player = QMediaPlayer(self)
+        self.last_red = None
         self.WIDTH = 1200
         self.HEIGHT = 900
         super().resize(self.WIDTH, self.HEIGHT)
@@ -548,6 +553,16 @@ class GameWindow(QtWidgets.QMainWindow):
         plaintext = struct.pack(">?",  self.win_flag) + buffer
         Utils.send_encrypted(self.sock, self.aes, plaintext)
 
+    def light_changed(self, red: bool):
+        if red == self.last_red:
+            return
+        self.last_red = red
+
+        fn = "redlight.mp3" if red else "greenlight.mp3"
+        url = QUrl.fromLocalFile(fn)
+        self.media_player.setMedia(QMediaContent(url))
+        self.media_player.play()
+
 
     def update_background(self, red_light : bool):
         palette = QtGui.QPalette()
@@ -563,6 +578,7 @@ class GameWindow(QtWidgets.QMainWindow):
 
     def update_frame(self, frame: np.ndarray, red_light : bool):
         # convert BGR→RGB→QImage
+        self.light_changed(red_light)
         self.update_background(red_light)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb.shape

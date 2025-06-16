@@ -145,7 +145,7 @@ class GameRoom:
         conn.commit()
         conn.close()
         for spec, aes in self.spectators:
-            Utils.send_encrypted(sock, aes, plaintext)
+            Utils.send_encrypted(spec, aes, plaintext)
 
     def change_light(self):
         elapsed_time = time.time() - self.start_time
