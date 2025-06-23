@@ -344,7 +344,7 @@ class MenuWindow(QtWidgets.QMainWindow):
     def on_create_submit(self):
         # User clicked “Create game” inside the settings form:
         light_dur = self.light_duration_combo.currentText()
-        max_pl = self.max_players_combo.currentText()
+        max_players = int(self.max_players_combo.currentText())
         role = self.create_role_combo.currentText()
 
         msg = json.dumps({
@@ -352,22 +352,18 @@ class MenuWindow(QtWidgets.QMainWindow):
             "user": self.user,
             "role": role,
             "light_duration": int(light_dur) if light_dur.isdigit() else light_dur,
-            "max_players": int(max_pl)
+            "max_players": max_players
         }).encode()
 
         Utils.send_encrypted(self.sock, self.aes, msg)
         reply_buffer = Utils.recv_encrypted(self.sock, self.aes)
         reply = json.loads(reply_buffer)
         if reply.get("ok"):
-            room_id = reply.get("room_id")
-            # Now hide _all_ menus, launch game window:
-            self.main_menu_widget.setVisible(False)
-            self.settings_widget.setVisible(False)
-            self.join_widget.setVisible(False)
-
-            self.game_window = GameWindow(self.sock, self.aes, role, room_id)
-            self.game_window.show()
-            self.hide()  # hide this window itself
+            if reply.get("ok"):
+                room_id = reply["room_id"]
+                self.game_window = GameWindow(self.sock, self.aes, role, room_id, True, max_players)
+                self.game_window.show()
+                self.hide()
         else:
             QtWidgets.QMessageBox.warning(self, "Error", "Unable to create game")
 
@@ -400,12 +396,9 @@ class MenuWindow(QtWidgets.QMainWindow):
         reply_buffer = Utils.recv_encrypted(self.sock, self.aes)
         reply = json.loads(reply_buffer)
         if reply.get("ok"):
-            # Hide everything and open the game window:
-            self.main_menu_widget.setVisible(False)
-            self.settings_widget.setVisible(False)
-            self.join_widget.setVisible(False)
-
-            self.game_window = GameWindow(self.sock, self.aes, role, room_id)
+            max_players = reply.get("max_players", None)
+            print(max_players)
+            self.game_window = GameWindow(self.sock, self.aes, role, room_id, False, max_players)
             self.game_window.show()
             self.hide()
         else:
@@ -438,7 +431,7 @@ class MenuWindow(QtWidgets.QMainWindow):
 # ─── Game Window ────────────────────────────────────────────────────────────────
 
 class GameWindow(QtWidgets.QMainWindow):
-    def __init__(self, sock, aes, role, room_id):
+    def __init__(self, sock, aes, role, room_id, host, max_players):
         super().__init__()
         self.sock = sock
         self.aes = aes
@@ -450,6 +443,9 @@ class GameWindow(QtWidgets.QMainWindow):
         super().resize(self.WIDTH, self.HEIGHT)
         self.setWindowTitle(f"Red Light Green Light — {role.title()}")
         self.role = role
+        self.host = host
+        self.max_players = max_players
+        self.room_id = room_id
         self.win_flag = False
 
         # Central widget: a QLabel to display video
@@ -520,24 +516,38 @@ class GameWindow(QtWidgets.QMainWindow):
         self.statusbar.setObjectName("statusbar")
         self.setStatusBar(self.statusbar)
 
+        self.waiting_for_start = False
+        if self.host:
+            if self.role == 'player':
+                # Host is a player; waiting if max_players > 1
+                if self.max_players and self.max_players > 1:
+                    self.waiting_for_start = True
+            else:
+                # Host is a spectator; always waiting initially (game starts when host triggers or room fills)
+                self.waiting_for_start = True
 
+        if self.host and self.waiting_for_start:
+            self.start_button = QtWidgets.QPushButton("Start Game", self.centralwidget)
+            self.start_button.setFont(QtGui.QFont("Bernard MT Condensed", 18))
+            self.start_button.setGeometry(self.WIDTH - 180, 20, 160, 50)  # position it at top-right
+            self.start_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+            self.start_button.clicked.connect(self.on_start_game_clicked)
 
         if role == 'player':
-            # 1) Create the Win button as a child of the same frame that holds your video
+            # Create "Win" button as before
             self.win_button = QtWidgets.QPushButton(self.frame)
-            # 2) Set its label
             self.win_button.setText("Win!")
-            # 3) Position it somewhere—e.g. bottom‐left corner of the frame
-            #    Here x=50, y=frame.height()-50, width=100, height=30
-            button_width = 100
-            button_height = 40
-            self.win_button.setGeometry((self.frame.width()//2)-button_width//2,(self.frame.height()-100), button_width, button_height)
-            # 4) Wire it up
-            self.win_button.setText("Win!")
-            self.win_button.clicked.connect(self.button_pressed)
-            self.cap_thread = CaptureThread()
-            self.cap_thread.send_frame.connect(self.on_send_frame)
-            self.cap_thread.start()
+            self.win_button.setGeometry((self.frame.width() // 2) - 50, self.frame.height() - 100, 100, 40)
+            self.win_button.clicked.connect(self.win_pressed)
+
+            if not (self.host and self.waiting_for_start):
+                # Not waiting: start capturing immediately
+                self.cap_thread = CaptureThread()
+                self.cap_thread.send_frame.connect(self.on_send_frame)
+                self.cap_thread.start()
+            else:
+                # Waiting for start: do not start capture yet
+                self.cap_thread = None
 
         # Threads
         self.net_thread = NetworkThread(self.sock, self.aes, role)
@@ -546,8 +556,32 @@ class GameWindow(QtWidgets.QMainWindow):
         self.net_thread.start()
 
 
-    def button_pressed(self):
+    def win_pressed(self):
         self.win_flag = True
+
+    def on_start_game_clicked(self):
+        # Construct start_game request
+        room_id = self.room_id  # stored earlier
+        msg = json.dumps({"action": "start_game", "room_id": room_id}).encode()
+        Utils.send_encrypted(self.sock, self.aes, msg)
+
+        self.start_button.setEnabled(False)
+
+        # if host is also a player, kick off the camera now
+        if self.role == 'player' and self.cap_thread is None:
+            self.cap_thread = CaptureThread()
+            self.cap_thread.send_frame.connect(self.on_send_frame)
+            self.cap_thread.start()
+
+        # Disable the Start button to prevent multiple clicks
+        if hasattr(self, 'start_button'):
+            self.start_button.setEnabled(False)
+
+        # If host is a player and capture was not started, start it now
+        if self.role == 'player' and self.cap_thread is None:
+            self.cap_thread = CaptureThread()
+            self.cap_thread.send_frame.connect(self.on_send_frame)
+            self.cap_thread.start()
     def on_send_frame(self, buffer):
         # header: 1 byte win + 4 byte size
         plaintext = struct.pack(">?",  self.win_flag) + buffer
