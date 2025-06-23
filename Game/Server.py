@@ -21,8 +21,7 @@ class GameRoom:
         self.red_light = False
         self.light_duration = light_duration
         self.start_time = None
-        self.game_started = False
-        self.host = None
+
     def generate_game_id(self, length):
         characters = string.ascii_letters + string.digits
         return ''.join(random.choice(characters) for _ in range(length))
@@ -53,39 +52,14 @@ class GameRoom:
         try:
             while active and self.winner is None:
                 plaintext = Utils.recv_encrypted(sock, aes)
-                if plaintext and plaintext[0] not in (0, 1):
-                    msg = json.loads(plaintext.decode())
-                    action = msg.get("action")
-                    if action == "start_game":
-                        if self.game_started:
-                            reply = {"ok": False, "error": "Game already started."}
-                        elif len(self.users) == 0:
-                            reply = {"ok": False, "error": "No players in room."}
-                        else:
-                            self.game_started = True
-                            threading.Thread(target=self.game_loop, daemon=True).start()
-                            reply = {"ok": True}
-                        Utils.send_encrypted(sock, aes, json.dumps(reply).encode())
-                        # Continue or break out as appropriate
-                        if reply.get("ok"):
-                            # Game started, continue to receive frames
-                            active = self.users[user]['active']
-                            continue
-                        else:
-                            # If error, just continue waiting (or break if needed)
-                            continue
-                    elif action == "exit":
-                        break  # handle player exit if needed
-                    else:
-                        continue  # ignore other actions
-                else:
-                    win_flag = plaintext[0]
-                    payload = plaintext[1:]
-                    arr = np.frombuffer(payload, np.uint8)
-                    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                    with self.lock:
-                        self.users[user]['frame'] = (frame, win_flag)
-                        active = self.users[user]['active']
+                win_flag = plaintext[0]
+                payload = plaintext[1:]
+                arr = np.frombuffer(payload, np.uint8)
+                frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                with self.lock:
+                    self.users[user]['frame'] = (frame, win_flag)
+                    active = self.users[user]['active']
+            print("Success")
 
         except (ConnectionAbortedError, ConnectionResetError):
             # The socket was closed from the other side—just exit cleanly
@@ -154,9 +128,10 @@ class GameRoom:
 
         # game ended, send final result frames once more
         # overlay result on the last out frame
-        frame = 255 * np.ones((200, 640, 3), np.uint8)
+        frame = 255 * np.ones((300, 800, 3), np.uint8)
         text = f"Winner: player {self.winner[1]} from  {self.winner[0]}'s game" if self.winner else "Everyone Lost"
-        cv2.putText(frame, text, (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 3)
+        color = (0, 255, 0) if self.winner else (0, 0, 255)
+        cv2.putText(frame, text, (20, 100), cv2.QT_FONT_NORMAL, 1.2, color, 2)
         success, jpg = cv2.imencode('.jpg', frame)
         if not success:
             return
@@ -171,7 +146,7 @@ class GameRoom:
         conn.commit()
         conn.close()
         for spec, aes in self.spectators:
-            Utils.send_encrypted(spec, aes, plaintext)
+            Utils.send_encrypted(sock, aes, plaintext)
 
     def change_light(self):
         elapsed_time = time.time() - self.start_time
@@ -329,7 +304,6 @@ class Server:
                 role = msg["role"]
 
                 gr = GameRoom(light_duration, max_players)
-                gr.host = user
                 self.gameRooms[gr.room_id] = gr
                 success = gr.add_player(user, sock, aes_key, role)
                 reply = {"ok": success, "room_id": gr.room_id}
@@ -341,20 +315,16 @@ class Server:
                 role    = msg["role"]
                 if room_id not in self.gameRooms:
                     reply = {"ok": False, "error": "Room not found"}
+                    Utils.send_encrypted(sock, aes_key, json.dumps(reply).encode())
                 else:
                     gr = self.gameRooms[room_id]
-                    if gr.game_started:
-                        reply = {"ok": False, "error": "Game already started"}
-                        Utils.send_encrypted(sock, aes_key, json.dumps(reply).encode())
-                        continue
                     success = gr.add_player(user, sock, aes_key, role)
                     if success:
-                        reply = {"ok": True, "players": len(gr.users), "max_players": gr.max_players}
+                        reply = {"ok": True, "players": len(gr.users)}
                     else:
                         reply = {"ok": False, "error": "Could not join"}
                     Utils.send_encrypted(sock, aes_key, json.dumps(reply).encode())
-                    if reply["ok"]:
-                        break
+                    break
 
             elif action == "start_game":
                 room_id = msg["room_id"]
