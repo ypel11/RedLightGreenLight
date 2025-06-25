@@ -2,7 +2,7 @@
 import socket, threading, struct, time, random, string, cv2, numpy as np, sqlite3, json, bcrypt
 from GameLogic import Game
 import Utils
-HOST = '0.0.0.0'
+HOST = '10.100.102.32'
 PORT = 5000
 MAX_PLAYERS = 1
 TICK = 0.05
@@ -118,7 +118,7 @@ class GameRoom:
                     cols = min(len(alive_frames), 3)  # up to 3 columns
                     rows = ceil(len(alive_frames) / cols)
                     grid = Utils.stack_frames(alive_frames, grid_size=(rows, cols))
-                    success, jpg = cv2.imencode('.jpg', frame)
+                    success, jpg = cv2.imencode('.jpg', grid)
                     if not success:
                         return
                     buffer = jpg.tobytes()
